@@ -1,0 +1,4 @@
+- text: Health check returns 200 on a clean checkout
+  status: Passed
+- text: Migrations apply without manual steps
+  status: Passed

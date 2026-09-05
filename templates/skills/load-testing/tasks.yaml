@@ -1,0 +1,4 @@
+- text: Define the target load profile
+  done: true
+- text: Automate the load run and publish results
+  done: false

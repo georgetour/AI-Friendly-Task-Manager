@@ -1,0 +1,4 @@
+- text: Tag-triggered production deploy
+  done: false
+- text: One-command rollback to the previous release
+  done: false

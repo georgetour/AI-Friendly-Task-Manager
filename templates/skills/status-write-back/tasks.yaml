@@ -1,0 +1,4 @@
+- text: Swap a single status token without re-rendering the file
+  done: true
+- text: Regenerate the roll-up summary after each status change
+  done: true

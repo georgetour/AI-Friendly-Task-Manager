@@ -1,0 +1,34 @@
+# .NET build output
+bin/
+obj/
+[Bb]in/
+[Oo]bj/
+
+# Rider / VS
+.idea/
+.vs/
+*.user
+
+# Local per-install config and generated content — never shipped/tracked
+aiftm.config.json
+src/AIFTM.Api/data/
+src/AIFTM.Api/wwwroot/uploads/
+
+# Local-only design reference material (copied from the private source repo) — never tracked
+reference/
+
+# Browser-automation scratch output
+.playwright-mcp/
+# Screenshots taken while driving the app. One of these reached a commit via `git add -A` and
+# shipped in the repo root; the repo has no business holding loose images.
+/*.png
+/*.jpg
+/*.webp
+
+# Local-only development process records (specs, plans, working notes) — never tracked
+docs/superpowers/
+.superpowers/
+.claude/
+
+# The exported demo site — built by `-- export-demo`, published from CI, never committed.
+/_site/

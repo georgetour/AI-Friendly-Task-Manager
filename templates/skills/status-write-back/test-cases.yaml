@@ -1,0 +1,4 @@
+- text: Clicking a task checkbox flips exactly one cell in the file
+  status: Passed
+- text: Changing a story status rewrites only its status line
+  status: Not Run

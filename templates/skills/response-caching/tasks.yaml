@@ -1,0 +1,4 @@
+- text: Cache catalog listings
+  done: false
+- text: Invalidate cache when products change
+  done: false

@@ -1,0 +1,26 @@
+<Project>
+
+  <!--
+    Applies to every project in the repo, so a new one cannot quietly opt out.
+
+    EnforceCodeStyleInBuild is the part that matters: without it the .editorconfig naming rules
+    are an IDE suggestion that only shows up if someone happens to open the file. With it, the
+    build checks them, which means CI checks them too.
+  -->
+  <PropertyGroup>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <AnalysisMode>Recommended</AnalysisMode>
+  </PropertyGroup>
+
+  <!--
+    On CI a warning is a failure; locally it stays a warning. Half-finished code mid-edit should
+    not refuse to build, but nothing should reach main that a tool could have caught. The repo is
+    at zero warnings, so this starts enforcing from a clean state rather than a backlog of noise.
+  -->
+  <PropertyGroup Condition="'$(ContinuousIntegrationBuild)' == 'true'">
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

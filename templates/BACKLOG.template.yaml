@@ -1,0 +1,146 @@
+project: Acme App
+roadmap:
+- V0.1
+- V1
+- V1.5
+- V2
+- V2.1
+- V3
+- V4
+- V5
+epics:
+- number: 0
+  title: Developer Tooling
+  stories:
+  - code: US-01
+    title: Backlog Board
+    status: Done
+    release: V0.1
+    folder: backlog-board
+  - code: US-02
+    title: Status Write-Back
+    status: Vendor Test
+    release: V0.1
+    folder: status-write-back
+- number: 1
+  title: Core Application
+  stories:
+  - code: US-03
+    title: Day 0 — Local Setup
+    status: Done
+    release: V1
+    folder: day-0-local-setup
+  - code: US-04
+    title: User Management
+    status: In Progress
+    release: V1
+    folder: user-management
+  - code: US-05
+    title: Navigation Menus
+    status: Refined
+    release: V1
+    folder: navigation-menus
+  - code: US-06
+    title: Product Catalog
+    status: In Progress
+    release: V1
+    folder: product-catalog
+  - code: US-07
+    title: Public Homepage
+    status: Done
+    release: V1
+    folder: public-homepage
+  - code: US-08
+    title: Orders
+    status: Under Review
+    release: V1
+    folder: orders
+  - code: US-09
+    title: Checkout and Payment
+    status: Under Review
+    release: V1
+    folder: checkout-and-payment
+  - code: US-10
+    title: Customer Dashboard
+    status: Refined
+    release: V1
+    folder: customer-dashboard
+  - code: US-11
+    title: Email Notifications
+    status: Not Yet Started
+    release: V1.5
+    folder: email-notifications
+  - code: US-12
+    title: Reporting
+    status: Not Yet Started
+    release: V4
+    folder: reporting
+  - code: US-13
+    title: Wishlist
+    status: On Hold
+    release: V5
+    folder: wishlist
+- number: 2
+  title: CI/CD and Deployment
+  stories:
+  - code: US-14
+    title: Build and Test Pipeline
+    status: Done
+    release: V1
+    folder: build-and-test-pipeline
+  - code: US-15
+    title: Staging Deployment
+    status: In Progress
+    release: V1
+    folder: staging-deployment
+  - code: US-16
+    title: Production Release
+    status: Not Yet Started
+    release: V1
+    folder: production-release
+  - code: US-17
+    title: Secrets and Configuration
+    status: Under Review
+    release: V1
+    folder: secrets-and-configuration
+- number: 3
+  title: Mobile Apps
+  stories:
+  - code: US-18
+    title: Placeholder — Mobile Stories Land Here
+    status: Not Yet Started
+    release: V2
+    folder: placeholder-mobile-stories-land-here
+- number: 4
+  title: Scaling and Performance
+  stories:
+  - code: US-19
+    title: Database Indexing
+    status: Under Review
+    release: V3
+    folder: database-indexing
+  - code: US-20
+    title: Response Caching
+    status: Not Yet Started
+    release: V3
+    folder: response-caching
+  - code: US-21
+    title: Load Testing
+    status: In Progress
+    release: V3
+    folder: load-testing
+  - code: US-22
+    title: Background Job Processing
+    status: On Hold
+    release: V3
+    folder: background-job-processing
+  - code: US-23
+    title: Monitoring and Alerting
+    status: Not Yet Started
+    release: V3
+    folder: monitoring-and-alerting
+  - code: US-24
+    title: Capacity Review
+    status: On Hold
+    release: V3
+    folder: capacity-review

@@ -1,0 +1,4 @@
+- text: Index the catalog and order lookup paths
+  done: false
+- text: Record index definitions in the design notes
+  done: false

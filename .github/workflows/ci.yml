@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    # Linux on purpose: the app has no shell dependency and no PowerShell anywhere, and running
+    # here is what proves it. It also catches the case-sensitivity bugs a Windows-only run hides.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      # The UI tests install Chromium on first use. Without this the download is repeated on every
+      # run; the browser only changes when the Playwright package version does, so that is the key.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-1.49.0
+
+      - name: Restore
+        run: dotnet restore
+
+      # ContinuousIntegrationBuild turns analyzer and naming warnings into errors — see
+      # Directory.Build.props. Without this the rules are advice nobody has to take.
+      - name: Build
+        run: dotnet build --no-restore -p:ContinuousIntegrationBuild=true
+
+      - name: Test
+        run: dotnet test --no-build -p:ContinuousIntegrationBuild=true --verbosity normal

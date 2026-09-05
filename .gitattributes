@@ -1,0 +1,8 @@
+# Markdown here is content, not just source: templates/ is copied verbatim into people's projects
+# and BACKLOG.md is compared byte-for-byte by the summary tests. Normalising to LF in the repo and
+# in the working copy keeps a Windows clone and a Linux CI run looking at identical bytes.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.webp binary

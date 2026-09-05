@@ -1,0 +1,4 @@
+- text: Publish error-rate and latency metrics
+  done: false
+- text: Alert when error rate exceeds the threshold
+  done: false

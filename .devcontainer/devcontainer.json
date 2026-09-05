@@ -1,0 +1,54 @@
+{
+  "name": "AI Friendly Task Manager",
+
+  // The .NET SDK image rather than the app's own Dockerfile: a container that runs the app wants
+  // only the ASP.NET runtime, while this one has to build and test it too. Different jobs.
+  "image": "mcr.microsoft.com/devcontainers/dotnet:1-9.0",
+
+  "forwardPorts": [5249],
+  "portsAttributes": {
+    "5249": {
+      "label": "AI Friendly Task Manager",
+      // notify, because the other two both fail here and each failure was observed:
+      //   openBrowser  asks for a new tab, and browsers block programmatic popups — the visitor got
+      //                an editor and a README with no sign the app was running.
+      //   openPreview  renders in an iframe, and Program.cs sends frame-ancestors 'none', so the
+      //                pane can never display the page however long you wait or refresh.
+      // notify shows a button. Clicking it is a user gesture, which nothing blocks, and it opens a
+      // real tab where the frame-ancestors rule does not apply.
+      "onAutoForward": "notify"
+    }
+  },
+
+  "containerEnv": {
+    "DOTNET_NOLOGO": "true"
+  },
+
+  // Only the app: restoring the solution also pulls the test project's Playwright and xunit
+  // packages, which nobody opening a Codespace to look at the board needs.
+  "postCreateCommand": "dotnet restore src/AIFTM.Api",
+
+  // Started only if nothing is answering yet. postAttachCommand runs on *every* attach, and a
+  // browser reconnecting counts — so the second run tried to bind a port the first was already
+  // holding and died with a page of stack trace, which is what a visitor saw.
+  //
+  // The guard asks the port rather than looking for the process: the shell running this command
+  // has "AIFTM.Api" in its own command line, so a pgrep would always match itself.
+  //
+  // --urls on the command line, not ASPNETCORE_URLS in the environment. `dotnet run` applies
+  // launchSettings.json, whose applicationUrl is http://localhost:5249, and that overrides the
+  // ambient variable — so the app bound loopback only and the port forwarder had nothing to see.
+  //
+  // First launch lands on the demo backlog: nothing is configured, so the app materialises
+  // templates/ into a real, writable copy.
+  // Prints the forwarded URL before starting, so there is always a visible, clickable way in even
+  // if the preview pane does not appear. In a Codespace those two variables are always set; run
+  // anywhere else they are empty and the line is simply skipped.
+  "postAttachCommand": "bash .devcontainer/start.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-dotnettools.csdevkit"]
+    }
+  }
+}

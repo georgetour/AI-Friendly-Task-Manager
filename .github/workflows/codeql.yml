@@ -1,0 +1,44 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, so a vulnerability disclosed in a dependency after the last push still surfaces.
+    - cron: '0 3 * * 1'
+
+jobs:
+  analyze:
+    name: Analyze C#
+    runs-on: ubuntu-latest
+
+    permissions:
+      security-events: write   # to upload the results
+      contents: read
+      actions: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned before init: CodeQL's autobuild guesses at the SDK, and the runner image does not
+      # reliably carry .NET 9. Building it ourselves is one line and removes the guess.
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: csharp
+          build-mode: manual
+
+      # Must run between init and analyze so CodeQL can trace the compiler. Not passing
+      # ContinuousIntegrationBuild here on purpose: warnings-as-errors is the CI workflow's job,
+      # and a style warning should not be able to hide a security finding.
+      - name: Build
+        run: dotnet build AIFTM.sln --configuration Release
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:csharp"

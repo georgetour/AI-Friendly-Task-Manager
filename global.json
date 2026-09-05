@@ -1,0 +1,7 @@
+{
+  "//": "The floor is the .NET 9 SDK, matching what the README asks you to install. Do not pin a patch version here: rollForward only rolls upward, so pinning the newest SDK on one machine locks out every image and machine that has an older one — the devcontainer image ships 9.0.306, and a 9.0.316 floor broke it outright.",
+  "sdk": {
+    "version": "9.0.100",
+    "rollForward": "latestFeature"
+  }
+}

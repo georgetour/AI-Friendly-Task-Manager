@@ -1,0 +1,6 @@
+- text: Register with a new email → account created, signed in
+  status: Passed
+- text: Register with an existing email → clear error, no duplicate
+  status: Not Run
+- text: Sign out → protected pages redirect to sign-in
+  status: Not Run

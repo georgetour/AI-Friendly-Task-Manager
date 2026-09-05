@@ -1,0 +1,6 @@
+- text: Document the required toolchain and versions
+  done: true
+- text: Health endpoint returns OK locally
+  done: true
+- text: Database migrations apply from a clean database
+  done: true

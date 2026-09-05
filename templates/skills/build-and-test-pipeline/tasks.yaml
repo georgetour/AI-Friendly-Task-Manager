@@ -1,0 +1,4 @@
+- text: Build and unit-test workflow on every push
+  done: true
+- text: Fail the build on any failing test
+  done: true

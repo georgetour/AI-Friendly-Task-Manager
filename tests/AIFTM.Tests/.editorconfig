@@ -1,0 +1,20 @@
+# Test-project overrides.
+#
+# CA1707 bans underscores in identifiers. That is right for a public API and wrong for xUnit test
+# names, where the underscores are what make the name a readable sentence. Suppressed here only —
+# the rule stays on for src/, which is where it protects callers.
+
+[*.cs]
+dotnet_diagnostic.CA1707.severity = none
+
+# Test classes are instantiated per-test by the runner, not by us.
+dotnet_diagnostic.CA1812.severity = none
+
+# xUnit constructs and disposes a fresh fixture per test and nothing derives from these, so the
+# GC.SuppressFinalize ceremony CA1816 asks for guards against a case that cannot arise here.
+dotnet_diagnostic.CA1816.severity = none
+
+# CA1861 wants constant arrays hoisted to static readonly fields because the call is "repeated".
+# In an assertion the array is the expected value, written once and read once — hoisting it would
+# move the thing being asserted away from the assertion.
+dotnet_diagnostic.CA1861.severity = none

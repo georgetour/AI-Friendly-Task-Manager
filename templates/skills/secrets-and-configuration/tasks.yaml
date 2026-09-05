@@ -1,0 +1,4 @@
+- text: Move all secrets to the secret store
+  done: false
+- text: Fail startup with a clear message when config is missing
+  done: false

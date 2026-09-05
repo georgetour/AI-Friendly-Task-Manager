@@ -1,0 +1,6 @@
+- text: Listing returns products for the selected category
+  status: Passed
+- text: Search matches partial product names
+  status: Not Run
+- text: Empty category shows a friendly empty state
+  status: Failed

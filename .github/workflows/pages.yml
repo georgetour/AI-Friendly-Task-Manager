@@ -1,0 +1,70 @@
+name: Demo
+
+# Publishes the browsable demo to GitHub Pages: the real front end, plus every answer the API would
+# have given, baked in beside it. There is no second copy of the app to keep in step — the site is
+# `wwwroot` verbatim with one extra script in front of it.
+#
+# Needs Settings → Pages → Source: GitHub Actions, once.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One deployment at a time, and never cancel one in flight — a half-published site is worse than an
+# old one. Queued runs collapse to the newest, which is the only one worth publishing anyway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      # The same CLI anyone can run locally: no shell scripting, no separate generator, and the
+      # data comes from the same BacklogService the running app uses.
+      # Paths are relative to the repo, not to the working directory — `dotnet run --project` has
+      # already moved into the project folder by the time the app sees them.
+      - name: Export the demo site
+        run: >
+          dotnet run --project src/AIFTM.Api --
+          export-demo _site "/${{ github.event.repository.name }}"
+
+      # Cheap proof the export is not silently empty — a published blank page would look like the
+      # app is broken rather than like the workflow is.
+      - name: Check the export
+        run: |
+          test -f _site/index.html
+          test -f _site/404.html
+          grep -q 'app-base" content="/${{ github.event.repository.name }}/"' _site/index.html
+          # Assets are named after their contents, so a returning visitor cannot be served a stale
+          # app.js from cache alongside a fresh page. A deploy that forgot to is worth failing on.
+          grep -qE 'app\.[0-9a-f]{8}\.js' _site/index.html
+          ls _site/demo-data.*.js >/dev/null
+          grep -q '"epics"' _site/demo-data.*.js
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

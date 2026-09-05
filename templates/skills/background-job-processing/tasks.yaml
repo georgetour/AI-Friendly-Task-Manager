@@ -1,0 +1,4 @@
+- text: Introduce a background job queue
+  done: false
+- text: Move email sending to the queue
+  done: false

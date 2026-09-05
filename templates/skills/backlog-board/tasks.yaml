@@ -1,0 +1,6 @@
+- text: Write the detailed design
+  done: true
+- text: Parse the backlog file into epics, stories, tasks, and test cases
+  done: true
+- text: Render the board with per-story task and test meters
+  done: true

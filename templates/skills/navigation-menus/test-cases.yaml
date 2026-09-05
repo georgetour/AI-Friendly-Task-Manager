@@ -1,0 +1,4 @@
+- text: Signed-out visitor sees the public menu only
+  status: Not Run
+- text: Signed-in customer sees account entries
+  status: Not Run

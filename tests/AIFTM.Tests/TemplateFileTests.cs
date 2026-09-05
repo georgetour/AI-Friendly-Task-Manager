@@ -1,0 +1,169 @@
+using AIFTM.Api.Backlog;
+using AIFTM.Api.Services;
+
+namespace AIFTM.Tests;
+
+/// <summary>
+/// Guards the bundled starter content, which is also the first-run demo. If any of this breaks,
+/// a fresh clone shows a broken board on its very first screen.
+/// </summary>
+public class TemplateFileTests
+{
+    [Fact]
+    public void TemplateLocator_finds_the_backlog_template()
+    {
+        var path = TemplateLocator.Find("BACKLOG.template.yaml");
+
+        Assert.True(File.Exists(path));
+        Assert.EndsWith(Path.Combine("templates", "BACKLOG.template.yaml"), path);
+    }
+
+    [Fact]
+    public void TemplateLocator_finds_the_skill_template()
+    {
+        Assert.True(File.Exists(TemplateLocator.Find("SKILL.template.md")));
+    }
+
+    [Fact]
+    public void TemplateLocator_throws_for_an_unknown_file()
+    {
+        Assert.Throws<FileNotFoundException>(() => TemplateLocator.Find("NOPE.md"));
+    }
+
+    private static readonly string[] AllStatuses =
+    {
+        "Not Yet Started", "Under Review", "Refined", "In Progress", "Vendor Test", "Done", "On Hold",
+    };
+
+    private static string TemplatesDir() =>
+        Path.GetDirectoryName(TemplateLocator.Find("BACKLOG.template.yaml"))!;
+
+    private static string SkillsDir() => Path.Combine(TemplatesDir(), "skills");
+
+    private static Board Template() =>
+        YamlIndex.Parse(File.ReadAllText(TemplateLocator.Find("BACKLOG.template.yaml")));
+
+    [Fact]
+    public void Backlog_template_has_five_epics_with_expected_story_counts()
+    {
+        var byNum = Template().Epics.ToDictionary(e => e.Number, e => e.Stories.Count);
+
+        Assert.Equal(5, byNum.Count);
+        Assert.Equal(2, byNum[0]);   // Developer Tooling
+        Assert.Equal(11, byNum[1]);  // Core Application
+        Assert.Equal(4, byNum[2]);   // CI/CD and Deployment
+        Assert.Equal(1, byNum[3]);   // Mobile Apps — the placeholder story
+        Assert.Equal(6, byNum[4]);   // Scaling and Performance
+    }
+
+    [Fact]
+    public void Backlog_template_has_24_sequentially_coded_stories()
+    {
+        var codes = Template().Epics.SelectMany(e => e.Stories).Select(s => s.Code).ToList();
+
+        Assert.Equal(24, codes.Count);
+        Assert.Equal(Enumerable.Range(1, 24).Select(i => $"US-{i:D2}"), codes);
+    }
+
+    [Fact]
+    public void Backlog_template_exercises_all_seven_statuses()
+    {
+        var used = Template().Epics.SelectMany(e => e.Stories).Select(s => s.Status).ToHashSet();
+
+        Assert.All(AllStatuses, label => Assert.Contains(label, used));
+    }
+
+    [Fact]
+    public void Every_story_folder_exists_with_all_three_files()
+    {
+        Assert.All(Template().Epics.SelectMany(e => e.Stories), s =>
+        {
+            var dir = Path.Combine(SkillsDir(), s.Folder);
+            Assert.True(Directory.Exists(dir), $"{s.Code} points at '{s.Folder}', which is not in templates/skills.");
+            Assert.True(File.Exists(Path.Combine(dir, "SKILL.md")), $"{s.Folder} has no SKILL.md");
+            Assert.True(File.Exists(Path.Combine(dir, "tasks.yaml")), $"{s.Folder} has no tasks.yaml");
+            Assert.True(File.Exists(Path.Combine(dir, "test-cases.yaml")), $"{s.Folder} has no test-cases.yaml");
+        });
+    }
+
+    [Fact]
+    public void Every_story_ships_tasks_and_test_cases()
+    {
+        Assert.All(Template().Epics.SelectMany(e => e.Stories), s =>
+        {
+            var detail = StoryFolder.Read(SkillsDir(), s.Folder);
+            Assert.NotEmpty(detail.Tasks);
+            Assert.NotEmpty(detail.TestCases);
+        });
+    }
+
+    [Fact]
+    public void Template_ships_no_orphaned_story_folders()
+    {
+        var referenced = Template().Epics.SelectMany(e => e.Stories).Select(s => s.Folder).ToHashSet();
+
+        var onDisk = Directory.GetDirectories(SkillsDir())
+            .Select(d => Path.GetFileName(d)!).ToHashSet();
+
+        Assert.Equal(referenced.OrderBy(x => x), onDisk.OrderBy(x => x));
+    }
+
+    [Fact]
+    public void The_shipped_template_validates_clean()
+    {
+        // This is the demo a fresh clone sees. If it does not validate, the first screen is an error.
+        var report = BacklogValidation.Check(TemplateLocator.Find("BACKLOG.template.yaml"), SkillsDir());
+
+        Assert.True(report.Ok, string.Join("\n", report.Issues.Select(i => $"{i.Severity}: {i.Message}")));
+    }
+
+    [Fact]
+    public void The_template_has_a_readme_explaining_the_folder_layout()
+    {
+        var readme = Path.Combine(SkillsDir(), "README.md");
+
+        Assert.True(File.Exists(readme), "skills/README.md is how an agent learns the structure.");
+        var text = File.ReadAllText(readme);
+        Assert.Contains("tasks.yaml", text);
+        Assert.Contains("test-cases.yaml", text);
+    }
+
+    [Fact]
+    public void Every_story_is_Description_Tasks_Acceptance_Criteria_and_nothing_else()
+    {
+        // A story is prose; anything with state you tick is YAML. A "## Test Cases" table in
+        // SKILL.md is the same data as test-cases.yaml written twice, which is exactly the
+        // duplication the split storage exists to avoid. The demo shipped with eleven of them.
+        var expected = new[] { "## Description", "## Tasks", "## Acceptance Criteria" };
+
+        foreach (var skill in Directory.GetFiles(SkillsDir(), "SKILL.md", SearchOption.AllDirectories))
+        {
+            var headings = File.ReadAllLines(skill)
+                .Where(l => l.StartsWith("## ", StringComparison.Ordinal))
+                .ToArray();
+
+            Assert.Equal(expected, headings);
+        }
+    }
+
+    [Fact]
+    public void The_scaffold_a_new_story_is_created_from_has_the_same_three_sections()
+    {
+        var headings = File.ReadAllLines(TemplateLocator.Find("SKILL.template.md"))
+            .Where(l => l.StartsWith("## ", StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.Equal(new[] { "## Description", "## Tasks", "## Acceptance Criteria" }, headings);
+    }
+
+    [Fact]
+    public void Every_release_used_by_a_story_is_declared_in_the_roadmap()
+    {
+        var board = Template();
+
+        var used = board.Epics.SelectMany(e => e.Stories)
+            .Select(s => s.Release).Where(r => !string.IsNullOrWhiteSpace(r)).Distinct();
+
+        Assert.All(used, r => Assert.Contains(r, board.Roadmap));
+    }
+}

@@ -1,0 +1,4 @@
+- text: Successful payment creates a paid order
+  status: Not Run
+- text: Declined payment leaves the basket intact
+  status: Not Run

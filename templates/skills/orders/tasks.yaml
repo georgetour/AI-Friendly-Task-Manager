@@ -1,0 +1,6 @@
+- text: Order model, statuses, and history
+  done: false
+- text: Order list and detail pages
+  done: false
+- text: Cancel a pending order
+  done: false

@@ -1,0 +1,6 @@
+- text: Sign-up, sign-in, and sign-out flows
+  done: true
+- text: Profile page — view and edit display name
+  done: false
+- text: Password reset by email link
+  done: false

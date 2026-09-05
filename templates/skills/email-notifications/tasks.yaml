@@ -1,0 +1,4 @@
+- text: Transactional email templates
+  done: false
+- text: Send on order confirmed and shipped
+  done: false

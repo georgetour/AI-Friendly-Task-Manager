@@ -1,0 +1,6 @@
+- text: Basket to order conversion
+  done: false
+- text: Payment provider integration
+  done: false
+- text: Receipt shown and emailed on success
+  done: false

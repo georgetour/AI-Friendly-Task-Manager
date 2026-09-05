@@ -1,0 +1,2 @@
+- text: A failing test blocks the merge
+  status: Passed

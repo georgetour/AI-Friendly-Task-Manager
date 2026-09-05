@@ -1,0 +1,4 @@
+- text: Board shows every epic and story from the file
+  status: Passed
+- text: Each story's badge matches its status line
+  status: Passed

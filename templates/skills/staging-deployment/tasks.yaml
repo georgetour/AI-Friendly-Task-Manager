@@ -1,0 +1,4 @@
+- text: Deploy on merge to main
+  done: true
+- text: Smoke test after deploy
+  done: false

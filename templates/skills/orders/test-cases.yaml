@@ -1,0 +1,4 @@
+- text: Order list shows only the signed-in customer's orders
+  status: Not Run
+- text: Cancelling a pending order sets it to Cancelled
+  status: Not Run

@@ -1,0 +1,6 @@
+- text: Category model and seed data
+  done: true
+- text: Product list with pagination
+  done: true
+- text: Search by name and filter by category
+  done: false

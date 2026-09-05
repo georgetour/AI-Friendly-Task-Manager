@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Friendly Task Manager</title>
+<link rel="icon" href="data:,">
+<!-- The folder the app is served from. "/" for every local run; the Pages demo is a project site
+     at /AI-Friendly-Task-Manager/, so the export rewrites this and app.js builds every URL to match.
+     A <meta> rather than a <base> tag on purpose: the CSP sends base-uri 'none', which exists so an
+     injected <base> cannot re-point every relative URL on the page — including at a file someone
+     uploaded. A demo is not worth giving that up. -->
+<meta name="app-base" content="/">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<!-- Absolute, not relative: these are served under nested routes such as
+     /core-application/checkout-and-payment, where a relative "app.css" would 404. -->
+<link rel="stylesheet" href="/app.css">
+<!--
+  The whole UI is declared here as markup. Alpine fills it in from JSON: nothing in app.js builds
+  HTML, so what you see in the elements panel is what is written in this file.
+
+  Alpine's CSP build is deliberate. It evaluates bindings without new Function(), so the page can
+  be served under a strict Content-Security-Policy with no 'unsafe-eval'. The trade is that every
+  expression must be a property or a method call on the component — no template literals, no arrow
+  functions, no inline assignment. That is the constraint that keeps logic in app.js where it can
+  be read and tested, instead of accumulating in attributes.
+-->
+<script src="/vendor/alpine-csp.min.js" defer></script>
+<script src="/app.js"></script>
+</head>
+
+<body>
+<div id="root" x-data="aiftm" x-cloak>
+
+  <header id="apphead">
+    <div class="hwrap">
+      <button id="hamburger" class="hbtn icon-only" x-on:click="toggleDrawer"
+              x-bind:aria-expanded="drawerOpen" x-bind:aria-label="drawerLabel" x-bind:title="drawerLabel">
+        <span class="ic">☰</span>
+      </button>
+
+      <!-- Two elements, not one with a conditional class. With a logo it is a real link to the
+           Overview, so ctrl-click and middle-click open a tab the way they do on every other site;
+           a <button> can never do that. With no logo there is nowhere to go — it is the control
+           that sets one, which is a button.
+           x-if, not x-show: a hidden <img> still fetches its src, and with no logo set that is a
+           request for "null" against whatever route you happen to be on. -->
+      <template x-if="hasLogo">
+        <a id="logoSlot" class="has-logo" x-bind:href="homeUrl" x-on:click="logoNav"
+           x-bind:aria-label="logoLabel" x-bind:title="logoLabel">
+          <img x-bind:src="logoSrc" alt="">
+        </a>
+      </template>
+      <template x-if="!hasLogo">
+        <button id="logoSlot" type="button" x-on:click="setLogo"
+                x-bind:aria-label="logoLabel" x-bind:title="logoLabel"><span>+</span></button>
+      </template>
+
+      <!-- Orientation only, deliberately not a control: it says which board you are looking at.
+           Switching happens on the Projects page, reached from the top bar or the bottom bar. -->
+      <span class="app-name" x-bind:title="projectName">
+        <span x-text="projectName"></span>
+        <!-- The first run lands on a demo whose backlog is called "Acme App". Without this the
+             product looks like it is called that. -->
+        <span class="demo-chip" x-show="config.isDemo">Demo</span>
+      </span>
+      <div class="spacer"></div>
+
+      <!-- One global add menu, per the design system's action-placement rule: the top bar carries
+           a single add menu, never one button per thing you can create. -->
+      <div class="addwrap">
+        <button id="btnAdd" class="addpill" aria-haspopup="menu" aria-controls="addMenu"
+                x-bind:aria-expanded="addOpen" x-on:click.stop="toggleAdd" title="Add an epic or a user story">
+          <span class="ic">＋</span><span class="lbl">Add</span><span class="caret">▾</span>
+        </button>
+        <div id="addMenu" class="addmenu" role="menu" aria-labelledby="btnAdd"
+             x-show="addOpen" x-bind:class="addMenuClass" x-on:click.outside="closeAdd">
+          <button role="menuitem" x-on:click="goAddEpic">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+            <span>New epic</span>
+          </button>
+          <button role="menuitem" x-on:click="goAddStory">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+            <span>New user story</span>
+          </button>
+        </div>
+      </div>
+
+      <button id="btnSearch" class="hbtn h-stage" x-on:click="openSearch"
+              aria-label="Search" title="Search the backlog  (press /)">
+        <span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg></span>
+        <span class="lbl">Search</span>
+      </button>
+      <button id="btnProjects" class="hbtn h-stage" x-on:click="goProjects"
+              aria-label="Projects" title="Switch between projects, or add one">
+        <span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg></span>
+        <span class="lbl">Projects</span>
+      </button>
+      <button id="btnConfigure" class="hbtn h-stage icon-only" x-on:click="goConfigure"
+              aria-label="Configure" title="Configure — choose which BACKLOG.yaml and skills folder to use"><span class="ic">⚙</span></button>
+      <button id="btnSync" class="hbtn h-sync" x-on:click="reload"
+              aria-label="Reload from file" title="Reload every file from disk and check them for problems">
+        <span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></span>
+        <span class="lbl">Reload from file</span>
+      </button>
+      <button id="btnStage" class="hbtn h-stage" x-on:click="stage"
+              aria-label="Stage in git" title="Run git add on BACKLOG.yaml so your changes are staged — never commits">
+        <span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><circle cx="18" cy="8" r="2.2"></circle><path d="M6 8.2v7.6"></path><path d="M18 10.2a6 6 0 0 1-6 6H8.5"></path></svg></span>
+        <span class="lbl">Stage in git</span>
+      </button>
+      <button id="btnTheme" class="hbtn h-stage icon-only" x-on:click="toggleTheme"
+              aria-label="Switch theme" title="Switch between light and dark"><span class="ic">◐</span></button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div id="scrim" x-bind:class="scrimClass" x-on:click="closeDrawer"></div>
+
+    <!-- ============================== sidebar ============================== -->
+    <aside id="sidebar" class="aiftm-noscroll" x-bind:class="sidebarClass">
+
+      <!-- Rail: the collapsed desktop sidebar. -->
+      <div class="sb-rail" x-show="railed">
+        <button class="iconsq" x-on:click="toggleSidebar" aria-label="Expand sidebar" aria-expanded="false" title="Expand sidebar">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        </button>
+        <button class="iconsq" x-bind:class="boardNavClass" x-on:click="goBoard" aria-label="Overview" title="Overview — all epics">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg>
+        </button>
+        <button class="iconsq" x-bind:class="releasesNavClass" x-on:click="goReleases" aria-label="By release" title="By release">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+        </button>
+        <div class="sb-rule-rail"></div>
+        <template x-for="epic in epics" :key="epic.number">
+          <button class="rail-epic" x-bind:class="railEpicClass(epic)" x-on:click="openEpic(epic)" x-bind:title="epic.railTitle">
+            <span class="k">EPIC</span>
+            <span class="n" x-text="epic.number"></span>
+            <span class="dot" x-show="epic.isCurrent"></span>
+          </button>
+        </template>
+      </div>
+
+      <!-- Full sidebar: nav plus the epic tree. -->
+      <div class="sb-full" x-show="!railed">
+        <div class="sb-head">
+          <button class="iconsq" x-on:click="toggleSidebar" aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+        </div>
+
+        <!-- In the drawer band the bottom bar does not exist yet, so the drawer keeps the
+             destinations. Below it the bottom bar owns them and this is the epic tree only. -->
+        <template x-if="!bottomBarOwnsNav">
+          <div>
+            <button class="sb-row sb-nav" x-bind:class="boardNavClass" x-on:click="goBoard">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg>
+              <span>Overview</span>
+            </button>
+            <button class="sb-row sb-nav" x-bind:class="releasesNavClass" x-on:click="goReleases">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+              <span>By release</span>
+            </button>
+            <div class="sb-rule"></div>
+          </div>
+        </template>
+        <div class="sb-cap" x-show="bottomBarOwnsNav">EPICS</div>
+
+        <template x-for="epic in epics" :key="epic.number">
+          <div>
+            <div class="sb-epicwrap">
+              <button class="sb-row sb-epic" x-bind:class="epicRowClass(epic)" x-on:click="openEpic(epic)">
+                <span class="num" x-text="epic.number"></span>
+                <span class="col">
+                  <span class="line">
+                    <span class="t" x-text="epic.title"></span>
+                    <span class="pill-cur" x-show="epic.isCurrent">CURRENT</span>
+                  </span>
+                  <span class="sub" x-text="epic.countLabel"></span>
+                </span>
+              </button>
+              <button class="sb-chev" x-on:click="toggleEpic(epic)" aria-label="Toggle stories"
+                      x-bind:aria-expanded="isEpicOpen(epic)" x-text="chevron(epic)"></button>
+            </div>
+            <div class="sb-stories" x-show="isEpicOpen(epic) && epic.stories.length">
+              <template x-for="story in epic.stories" :key="story.code">
+                <button class="sb-row sb-story" x-bind:class="storyRowClass(story)" x-on:click="openStory(story)" x-bind:title="story.title">
+                  <span class="sq" x-bind:class="story.statusClass"></span>
+                  <span class="code" x-text="story.code"></span>
+                  <span class="t" x-text="story.title"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </aside>
+
+    <!-- ============================== board ============================== -->
+    <main id="main" x-show="!onFormPage">
+      <p class="none" x-show="loadError" x-text="loadError"></p>
+
+      <!-- What Sync found. Splitting the backlog into an index plus story folders made it possible
+           for the two to disagree; this is where that is surfaced rather than mis-rendered. -->
+      <div class="report" x-show="report.show" x-bind:class="report.cls">
+        <div class="report-head">
+          <strong x-text="report.title"></strong>
+          <div class="spacer"></div>
+          <button class="rowdel" x-on:click="dismissReport" title="Dismiss" aria-label="Dismiss">✕</button>
+        </div>
+        <template x-for="issue in report.issues" :key="issue.message">
+          <div class="report-item">
+            <div class="report-line">
+              <span class="report-sev" x-bind:class="issue.sevClass" x-text="issue.severity"></span>
+              <span x-text="issue.message"></span>
+              <span class="report-where" x-show="issue.where" x-text="issue.where"></span>
+            </div>
+            <!-- The offending line with a caret under it, so nobody counts characters. -->
+            <pre class="report-snippet" x-show="issue.detail" x-text="issue.detail"></pre>
+          </div>
+        </template>
+      </div>
+
+      <!-- Breadcrumb, shown on every view except the top-level board. -->
+      <nav class="crumb" aria-label="Breadcrumb" x-show="crumbs.length" x-bind:class="crumbClass">
+        <template x-for="c in crumbs" :key="c.label">
+          <span class="crumb-item">
+            <span class="crumb-sep" aria-hidden="true" x-show="!c.first">›</span>
+            <button class="crumb-link" x-show="c.link" x-on:click="goCrumb(c)" x-text="c.label"></button>
+            <span class="crumb-cur" aria-current="page" x-show="!c.link" x-text="c.label"></span>
+          </span>
+        </template>
+      </nav>
+
+      <!-- Where the backlog stands, counted live from the index the board already holds. Nothing
+           is stored: a total kept beside what it counts is a second copy free to disagree. Only
+           the Overview — inside an epic or a release you are looking at a subset, and a total that
+           silently means something different is worse than no total. -->
+      <div class="summary" x-show="isBoardView">
+        <span class="summary-total" x-text="summaryTotal"></span>
+        <span class="summary-chips">
+          <template x-for="s in statusSummary" :key="s.label">
+            <span class="chip sm" x-bind:class="s.cls">
+              <span x-text="s.emoji"></span>
+              <span x-text="s.n"></span>
+              <span class="summary-label" x-text="s.label"></span>
+            </span>
+          </template>
+        </span>
+      </div>
+
+      <!-- Board and release views share one section shape: a header plus story rows. -->
+      <section class="stack" x-bind:class="stackClass" x-show="isListView">
+        <template x-for="section in sections" :key="section.key">
+          <div class="group">
+            <!-- epic header -->
+            <div class="epic-head" x-show="section.kind === 'epic'">
+              <button class="epic-open" x-on:click="openEpicByNumber(section.epicNumber)">
+                <span class="epic-badge">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>EPIC
+                </span>
+                <span class="epic-num" x-text="section.epicNumber"></span>
+                <span class="epic-name" x-text="section.title"></span>
+              </button>
+              <!-- The badge is the control, as designed: it reads CURRENT EPIC on the one you are
+                   working in and "Set as current" on the others, so the way to change it is the
+                   thing that shows it. Outside the epic-open button — a button cannot nest. -->
+              <button class="cur-set" x-bind:class="section.curClass" x-bind:title="section.curTitle"
+                      x-on:click="makeCurrentByNumber(section.epicNumber)">
+                <span class="dot2" x-show="section.curOn"></span>
+                <span x-text="section.curLabel"></span>
+              </button>
+              <span class="epic-count" x-text="section.countLabel"></span>
+            </div>
+
+            <!-- release header: a button only where it leads somewhere. The chevron is what says
+                 so — without it this looked identical to the non-clickable variant below, and the
+                 only way to find out was to click. -->
+            <button class="rel-head rel-open" x-show="section.kind === 'release' && section.clickable" x-on:click="openRelease(section)">
+              <span class="rel-tag">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+                <span x-text="section.title"></span>
+              </span>
+              <span class="rel-count" x-text="section.countLabel"></span>
+              <span class="rel-go" aria-hidden="true">›</span>
+            </button>
+            <div class="rel-head" x-show="section.kind === 'release' && !section.clickable">
+              <span class="rel-tag">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+                <span x-text="section.title"></span>
+              </span>
+              <span class="rel-count" x-text="section.countLabel"></span>
+            </div>
+
+            <template x-for="row in section.rows" :key="row.s.code">
+              <div class="story-row">
+                <button class="aiftm-open" x-on:click="openStory(row.s)" title="Open story">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="row-mark"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+                  <span class="row-code" x-text="row.s.code"></span>
+                  <span class="row-name" x-text="row.s.title"></span>
+                </button>
+                <span class="row-ctx" x-show="row.ctx" x-text="row.ctx"></span>
+                <span class="spacer"></span>
+                <button class="chip row-badge" x-bind:class="row.s.statusClass" x-on:click.stop="openStatusPicker(row.s, $el)">
+                  <span x-text="row.s.emoji"></span>
+                  <span x-text="row.s.status"></span>
+                  <span class="caret">▾</span>
+                </button>
+              </div>
+            </template>
+
+            <p class="none row" x-show="!section.rows.length">No stories yet.</p>
+          </div>
+        </template>
+        <p class="none" x-show="!sections.length" x-text="emptyListMessage"></p>
+      </section>
+
+      <!-- ============================ epic view ============================ -->
+      <section id="epicView" class="stack tight" x-show="isEpicView" x-bind:class="epicSectionClass">
+        <div class="epic-title">
+          <h2 tabindex="-1" x-text="epicHeading"></h2>
+          <!-- The same control as on the board. It used to be a badge that only appeared on the
+               current epic, so from any other epic there was no way to say "actually, this one". -->
+          <button class="cur-set" x-show="epic" x-bind:class="epicCurrentClass"
+                  x-bind:title="epicCurrentTitle" x-on:click="makeCurrentEpic">
+            <span class="dot2" x-show="epicIsCurrent"></span>
+            <span x-text="epicCurrentLabel"></span>
+          </button>
+          <span class="epic-count" x-text="epicCountLabel"></span>
+          <div class="spacer"></div>
+          <div class="rowacts">
+            <button class="actbtn" x-on:click="goRenameEpic" title="Rename epic" aria-label="Rename epic">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>
+              <span class="lbl">Rename epic</span>
+            </button>
+            <button class="actbtn danger" x-on:click="askDeleteEpic" title="Delete epic" aria-label="Delete epic">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+              <span class="lbl">Delete epic</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- An epic lists its stories and nothing else. Tasks and test cases belong to the story,
+             and repeating them here would duplicate the story page — as well as forcing the board
+             to load detail it does not show. -->
+        <div class="group" x-show="epicStories.length">
+          <template x-for="story in epicStories" :key="story.code">
+            <div class="story-row">
+              <button class="aiftm-open" x-on:click="openStory(story)" title="Open story">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="row-mark"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+                <span class="row-code" x-text="story.code"></span>
+                <span class="row-name" x-text="story.title"></span>
+              </button>
+              <span class="spacer"></span>
+              <!-- Always rendered, hidden when empty rather than removed: a release is optional, so
+                   x-show made the slot collapse and every status chip after it landed at a
+                   different x. Reserving the width keeps the two right-hand columns straight. -->
+              <span class="vtag" x-bind:class="story.releaseSlotClass" x-text="story.release"></span>
+              <button class="chip row-badge" x-bind:class="story.statusClass" x-on:click.stop="openStatusPicker(story, $el)">
+                <span x-text="story.emoji"></span>
+                <span x-text="story.status"></span>
+                <span class="caret">▾</span>
+              </button>
+            </div>
+          </template>
+        </div>
+        <!-- An empty epic is where you are most likely to want to add a story, and it was the one
+             place that offered no way to. The global Add menu still exists; this saves choosing the
+             epic again from a dropdown you just came from. -->
+        <div class="empty" x-show="!epicStories.length">
+          <p>No stories defined yet — candidate scope only.</p>
+          <button class="btn primary sm" x-on:click="goAddStoryHere">Add the first user story</button>
+        </div>
+      </section>
+
+      <!-- =========================== story detail =========================== -->
+      <section class="detail" x-show="isStoryView">
+        <div class="detail-meta">
+          <span class="scode lg" x-text="storyCode"></span>
+          <span class="vtag lg" x-show="storyRelease" x-text="storyRelease"></span>
+        </div>
+
+        <!-- tabindex="-1" so opening a search result can move focus here. Not in the tab order:
+             a negative index is reachable by script and skipped by Tab. -->
+        <h1 tabindex="-1" x-text="storyTitle"></h1>
+
+        <!-- Status, then the two things you do to a story. Edit sits beside the title rather than
+             inside the description panel: that is the difference between finding it and hunting. -->
+        <div class="detail-bar">
+          <button class="chip lg" x-bind:class="storyStatusClass" x-on:click.stop="openStatusPicker(story, $el)">
+            <span x-text="storyEmoji"></span>
+            <span x-text="storyStatusLabel"></span>
+            <span class="caret">▾</span>
+          </button>
+          <div class="spacer"></div>
+          <div class="rowacts">
+            <button class="actbtn" x-on:click="goEditStory" title="Edit title and release" aria-label="Edit title and release">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h10M4 17h7"></path></svg>
+              <span class="lbl">Edit story</span>
+            </button>
+            <button class="actbtn" x-on:click="editDescription" title="Edit description" aria-label="Edit description">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>
+              <span class="lbl">Edit description</span>
+            </button>
+            <button class="actbtn danger" x-on:click="askDeleteStory" title="Delete story" aria-label="Delete story">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+              <span class="lbl">Delete story</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="card progs wide">
+          <div class="prog">
+            <div class="prog-top"><span>Tasks</span><span class="prog-n" x-text="detailTaskLabel"></span></div>
+            <div class="bar"><i class="b-task" x-bind:style="detailTaskBar"></i></div>
+          </div>
+          <div class="prog">
+            <div class="prog-top">
+              <span>Test cases</span>
+              <span class="prog-n"><span x-text="detailTcLabel"></span><span class="prog-fail" x-show="detailTcFail" x-text="detailTcFailLabel"></span></span>
+            </div>
+            <div class="bar"><i class="b-pass" x-bind:style="detailTcPassBar"></i><i class="b-fail" x-bind:style="detailTcFailBar"></i></div>
+          </div>
+        </div>
+
+        <div class="card pad">
+          <!-- The card is the file, so it is headed by the file's name. Calling it "Description"
+               named it after one of the three sections it holds, and then the file's own
+               "## Description" heading said the same word again a line below. -->
+          <div class="cardhead">
+            <h2 class="filename" x-text="skill.path"></h2>
+            <div class="spacer"></div>
+            <span class="rowacts" x-show="skill.editing">
+              <button class="btn ghost sm" x-on:click="cancelDescription">Cancel</button>
+              <button class="btn primary sm" x-on:click="saveDescription" x-bind:disabled="skill.saving">Save</button>
+            </span>
+          </div>
+
+          <div class="cardbody">
+            <div class="md" x-show="skillReading" x-html="skill.html"></div>
+            <textarea class="editor" x-show="skill.editing" x-model="skill.draft"
+                      spellcheck="false" aria-label="Description, in markdown"></textarea>
+            <p class="hint" x-show="skill.editing">Plain markdown. Saved to <span class="mono" x-text="skill.path"></span>.</p>
+            <span class="none" x-show="skill.loading">Loading…</span>
+            <span class="none" x-show="skill.error" x-text="skill.error"></span>
+          </div>
+        </div>
+
+        <div class="card pad cols wide">
+          <div data-list="tasks">
+            <div class="colhead" x-text="detailTasksHeading"></div>
+            <span class="none" x-show="detail.loading">Loading…</span>
+            <span class="none" x-show="detail.error" x-text="detail.error"></span>
+
+            <template x-for="(task, i) in storyTasks" :key="i">
+              <div class="lrow" x-bind:data-i="i">
+                <button class="grip" x-bind:aria-label="gripLabel(task)"
+                        x-on:keydown.arrow-up.prevent="moveTaskUp(i)" x-on:keydown.arrow-down.prevent="moveTaskDown(i)">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.7"></circle><circle cx="15" cy="5" r="1.7"></circle><circle cx="9" cy="12" r="1.7"></circle><circle cx="15" cy="12" r="1.7"></circle><circle cx="9" cy="19" r="1.7"></circle><circle cx="15" cy="19" r="1.7"></circle></svg>
+                </button>
+                <button class="box" x-bind:class="boxClass(task)" x-on:click="toggleTask(i)"
+                        title="Toggle done" x-text="taskMark(task)"></button>
+                <span class="txt" x-show="editingTask !== i" x-bind:class="taskTextClass(task)"
+                      x-text="task.text" x-on:click="startEditTask(i)" title="Click to edit"></span>
+                <input class="inline-input" x-show="editingTask === i" x-ref="editTask" x-model="draftText"
+                       aria-label="Task text"
+                       x-on:keydown.enter="commitEditTask" x-on:keydown.escape="cancelEdit">
+                <span class="editacts" x-show="editingTask === i">
+                  <button class="btn primary sm" x-on:click="commitEditTask">Save</button>
+                  <button class="btn ghost sm" x-on:click="cancelEdit">Cancel</button>
+                </span>
+                <button class="rowdel" x-on:click="removeTask(i)" title="Delete task" aria-label="Delete task">✕</button>
+              </div>
+            </template>
+
+            <div class="lrow addrow">
+              <button class="addlink" x-show="!addingTask" x-on:click="startAddTask">＋ Add task</button>
+              <input class="inline-input" x-show="addingTask" x-ref="newTask" x-model="draftText"
+                     placeholder="What needs doing?" aria-label="New task"
+                     x-on:keydown.enter="commitAddTask" x-on:keydown.escape="cancelEdit">
+              <span class="editacts" x-show="addingTask">
+                <button class="btn primary sm" x-on:click="commitAddTask">Add</button>
+                <button class="btn ghost sm" x-on:click="cancelEdit">Cancel</button>
+              </span>
+            </div>
+          </div>
+
+          <div data-list="testCases">
+            <div class="colhead" x-text="detailTcHeading"></div>
+            <span class="none" x-show="detail.loading">Loading…</span>
+
+            <template x-for="(tc, i) in storyTestCases" :key="i">
+              <div class="lrow" x-bind:data-i="i">
+                <button class="grip" x-bind:aria-label="gripLabel(tc)"
+                        x-on:keydown.arrow-up.prevent="moveTestUp(i)" x-on:keydown.arrow-down.prevent="moveTestDown(i)">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.7"></circle><circle cx="15" cy="5" r="1.7"></circle><circle cx="9" cy="12" r="1.7"></circle><circle cx="15" cy="12" r="1.7"></circle><circle cx="9" cy="19" r="1.7"></circle><circle cx="15" cy="19" r="1.7"></circle></svg>
+                </button>
+                <button class="chip sm" x-bind:class="tc.statusClass" x-on:click.stop="openTestPicker(i, $el)">
+                  <span x-text="tc.status"></span><span class="caret">▾</span>
+                </button>
+                <span class="txt" x-text="tc.text"></span>
+                <button class="rowdel" x-on:click="removeTestCase(i)" title="Delete test case" aria-label="Delete test case">✕</button>
+              </div>
+            </template>
+
+            <div class="lrow addrow">
+              <button class="addlink" x-show="!addingTest" x-on:click="startAddTest">＋ Add test case</button>
+              <input class="inline-input" x-show="addingTest" x-ref="newTest" x-model="draftText"
+                     placeholder="What must be verified?" aria-label="New test case"
+                     x-on:keydown.enter="commitAddTest" x-on:keydown.escape="cancelEdit">
+              <span class="editacts" x-show="addingTest">
+                <button class="btn primary sm" x-on:click="commitAddTest">Add</button>
+                <button class="btn ghost sm" x-on:click="cancelEdit">Cancel</button>
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ============================ form pages ============================ -->
+    <main id="pages" x-show="onFormPage">
+
+      <!-- Projects answers "which project"; Configure answers "where are this project's files".
+           Keeping them apart is what stops both pages doing half of each job. -->
+      <section class="page" x-show="page === 'projects'">
+        <nav class="crumb"><button class="crumb-link" x-on:click="goBoard">Overview</button>
+          <span class="crumb-sep">›</span><span class="crumb-cur">Projects</span></nav>
+        <h1 class="page-title">Projects</h1>
+        <p class="page-sub">Each project is a backlog file and its story folders, left where they are.</p>
+
+        <p class="pinnote" x-show="pinned">
+          This instance is pinned to one backlog by its deployment configuration
+          (<span class="mono">BacklogPath</span>), so switching is turned off here. Remove that
+          setting to choose a project from this page.
+        </p>
+
+        <div class="projlist">
+          <template x-for="p in projects" :key="p.backlogPath">
+            <!-- The row itself is not a control. Switching project reloads the whole board, which
+                 is too much to happen from a stray tap on a name — it is a button you choose. -->
+            <div class="projrow" x-bind:class="p.rowClass">
+              <div class="projmain">
+                <div class="projhead">
+                  <span class="projname" x-text="p.name"></span>
+                  <!-- Said in words, not only in colour. Which project is open is the one thing
+                       this page exists to tell you, and colour alone does not tell it to someone
+                       who cannot distinguish it. -->
+                  <span class="projbadge" x-show="p.isCurrent">Current</span>
+                </div>
+                <div class="projpath mono" x-text="p.backlogPath"></div>
+                <div class="projmissing" x-show="p.missing">This file is not there any more.</div>
+              </div>
+              <div class="projacts">
+                <button class="btn ghost sm" x-on:click="selectProject(p)" x-bind:disabled="p.locked"
+                        x-text="p.checkLabel"></button>
+                <button class="iconbin" x-on:click="goRemoveProject(p)"
+                        x-bind:aria-label="p.removeLabel" x-bind:title="p.removeLabel">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                </button>
+              </div>
+            </div>
+          </template>
+          <div class="empty" x-show="!projects.length">
+            <p>No projects yet.</p>
+          </div>
+        </div>
+
+        <div class="formacts">
+          <button class="btn primary" x-on:click="goAddProject">Add a project</button>
+          <!-- Configure is this project's settings, so it belongs behind the project you picked —
+               and on a phone this is how you reach it, since the bottom bar holds Projects. -->
+          <button class="btn ghost" x-on:click="goConfigure">Configure this project</button>
+        </div>
+      </section>
+
+      <!-- Removing a project asks you to type its name. It is the one action here that a person
+           could regret, and typing the name is the difference between deciding and slipping. -->
+      <section class="page" x-show="page === 'remove-project'">
+        <nav class="crumb"><button class="crumb-link" x-on:click="goProjects">Projects</button>
+          <span class="crumb-sep">›</span><span class="crumb-cur">Remove project</span></nav>
+        <h1 class="page-title">Remove project</h1>
+        <p class="page-sub">Removing <span class="strong" x-text="removing.name"></span> from AI Friendly Task Manager.</p>
+
+        <div class="safenote">
+          <strong>Your files are not touched.</strong> The backlog and its story folders stay exactly
+          where they are — this only removes the project from this list. You can bring it back at any
+          time by adding it again with the same path.
+        </div>
+
+        <p class="projpath mono removepath" x-text="removing.backlogPath"></p>
+
+        <form x-on:submit.prevent="submitRemoveProject" novalidate>
+          <div class="field">
+            <label for="rmConfirm">Type <span class="strong" x-text="removing.name"></span> to confirm</label>
+            <input type="text" id="rmConfirm" name="confirmName" autocomplete="off"
+                   x-model="form.confirmName" x-bind:placeholder="removing.name">
+            <p class="field-err" x-show="err.confirmName" x-text="err.confirmName"></p>
+          </div>
+          <p class="field-err" x-show="err.form" x-text="err.form"></p>
+          <div class="formacts">
+            <button type="button" class="btn ghost" x-on:click="goProjects">Cancel</button>
+            <button type="submit" class="btn danger" x-bind:disabled="saving">Remove project</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- The add form is its own page. On one page with the list, the fields read as though they
+           edit the selected project rather than create a new one. -->
+      <section class="page" x-show="page === 'add-project'">
+        <nav class="crumb"><button class="crumb-link" x-on:click="goProjects">Projects</button>
+          <span class="crumb-sep">›</span><span class="crumb-cur">Add a project</span></nav>
+        <h1 class="page-title">Add a project</h1>
+        <p class="page-sub">Point AI Friendly Task Manager at another backlog. Nothing is moved or copied.</p>
+
+        <form x-on:submit.prevent="submitProject" novalidate>
+          <div class="field">
+            <label for="projBacklog">Backlog file</label>
+            <input type="text" id="projBacklog" name="backlogPath" autocomplete="off"
+                   x-model="form.backlogPath" x-bind:title="form.backlogPath"
+                   placeholder="C:/projects/my-app/BACKLOG.yaml">
+            <p class="hint">If the file doesn't exist yet, AI Friendly Task Manager creates it from the bundled template.</p>
+            <p class="field-err" x-show="err.backlogPath" x-text="err.backlogPath"></p>
+          </div>
+          <div class="field">
+            <label for="projSkills">Skills folder <span class="opt">optional</span></label>
+            <input type="text" id="projSkills" name="skillsPath" autocomplete="off"
+                   x-model="form.skillsPath" x-bind:title="form.skillsPath"
+                   placeholder="C:/projects/my-app/skills">
+            <p class="field-err" x-show="err.skillsPath" x-text="err.skillsPath"></p>
+          </div>
+          <p class="field-err" x-show="err.form" x-text="err.form"></p>
+          <div class="formacts">
+            <button type="button" class="btn ghost" x-on:click="goProjects">Cancel</button>
+            <button type="submit" class="btn primary" x-bind:disabled="saving">Add project</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="page" x-show="page === 'configure'">
+        <nav class="crumb"><button class="crumb-link" x-on:click="goProjects">Projects</button>
+          <span class="crumb-sep">›</span><span class="crumb-cur">Configure</span></nav>
+        <h1 class="page-title">Configure</h1>
+        <p class="page-sub">Where this project's files are. To switch project, go to
+          <button class="linkish" x-on:click="goProjects">Projects</button>.</p>
+
+        <form x-on:submit.prevent="saveConfig" novalidate>
+          <div class="field">
+            <label for="cfgName">Project name</label>
+            <input type="text" id="cfgName" name="projectName" autocomplete="off" maxlength="60"
+                   x-model="form.projectName" placeholder="My Project">
+            <!-- Saved into the backlog's own `project:` field, not into config — one home for the
+                 name means it cannot drift from what the file says. -->
+            <p class="hint">Stored in the backlog file itself, as <span class="mono">project:</span>.</p>
+            <p class="field-err" x-show="err.projectName" x-text="err.projectName"></p>
+          </div>
+
+          <div class="field">
+            <label for="cfgBacklog">Backlog file</label>
+            <input type="text" id="cfgBacklog" name="backlogPath" autocomplete="off"
+                   x-model="form.backlogPath" x-bind:title="form.backlogPath"
+                   placeholder="C:/projects/my-app/BACKLOG.yaml">
+            <!-- A long path scrolls out of sight inside a single-line input. This is the value in
+                 full, wrapped, so you can read what is actually in use without arrowing across. -->
+            <p class="pathnow" x-show="config.backlogPath">
+              <span class="k">In use</span><span class="mono" x-text="config.backlogPath"></span>
+            </p>
+            <p class="hint">If the file doesn't exist yet, AI Friendly Task Manager creates it from the bundled template.</p>
+            <p class="field-err" x-show="err.backlogPath" x-text="err.backlogPath"></p>
+          </div>
+
+          <div class="field">
+            <label for="cfgSkills">Skills folder <span class="opt">optional</span></label>
+            <input type="text" id="cfgSkills" name="skillsPath" autocomplete="off"
+                   x-model="form.skillsPath" x-bind:title="form.skillsPath"
+                   placeholder="C:/projects/my-app">
+            <p class="pathnow" x-show="config.skillsPath">
+              <span class="k">In use</span><span class="mono" x-text="config.skillsPath"></span>
+            </p>
+            <p class="hint">The folder that holds your story folders — usually <span class="mono">skills</span>.</p>
+            <p class="field-err" x-show="err.skillsPath" x-text="err.skillsPath"></p>
+          </div>
+
+          <div class="field">
+            <label for="cfgLogo">Logo <span class="opt">optional</span></label>
+            <template x-if="hasLogo">
+              <div class="logo-current">
+                <img x-bind:src="logoSrc" alt="">
+                <span class="logo-current-txt">Current logo</span>
+                <button type="button" class="btn ghost sm" x-on:click="removeLogo">Remove</button>
+              </div>
+            </template>
+            <input type="file" id="cfgLogo" name="logo" x-ref="logo"
+                   accept="image/png,image/jpeg,image/svg+xml,image/webp">
+            <p class="hint" x-text="logoHint"></p>
+          </div>
+
+          <p class="form-err" x-show="err.form" x-text="err.form"></p>
+          <div class="actions">
+            <button type="button" class="btn ghost" x-on:click="goBoard">Cancel</button>
+            <button type="submit" class="btn primary" x-bind:disabled="saving">Save changes</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="page" x-show="page === 'add-epic'">
+        <nav class="crumb"><button class="crumb-link" x-on:click="goBoard">Overview</button>
+          <span class="crumb-sep">›</span><span class="crumb-cur">Add epic</span></nav>
+        <h1 class="page-title">Add an epic</h1>
+        <p class="page-sub">Adds a new epic to your <span class="mono">BACKLOG.yaml</span>.</p>
+
+        <form x-on:submit.prevent="submitEpic" novalidate>
+          <div class="field">
+            <label for="epicTitle">Title</label>
+            <input type="text" id="epicTitle" name="title" required maxlength="120" autocomplete="off"
+                   x-model="form.title" placeholder="Reporting">
+            <p class="field-err" x-show="err.title" x-text="err.title"></p>
+          </div>
+
+          <p class="assigned">This will be <strong x-text="nextEpicLabel"></strong>, the next free number.</p>
+
+          <p class="form-err" x-show="err.form" x-text="err.form"></p>
+          <div class="actions">
+            <button type="button" class="btn ghost" x-on:click="goBoard">Cancel</button>
+            <button type="submit" class="btn primary" x-bind:disabled="saving">Add epic</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="page" x-show="page === 'edit-epic'">
+        <nav class="crumb"><button class="crumb-link" x-on:click="goBoard">Overview</button>
+          <span class="crumb-sep">›</span><span class="crumb-cur">Rename epic</span></nav>
+        <h1 class="page-title">Rename epic</h1>
+        <p class="page-sub">Changes the epic's title in your <span class="mono">BACKLOG.yaml</span>. Its stories are untouched.</p>
+
+        <form x-on:submit.prevent="submitRename" novalidate>
+          <div class="field">
+            <label for="editEpicTitle">Title</label>
+            <input type="text" id="editEpicTitle" name="title" required maxlength="120" autocomplete="off"
+                   x-model="form.title">
+            <p class="field-err" x-show="err.title" x-text="err.title"></p>
+          </div>
+
+          <p class="assigned">Renaming <strong x-text="editingEpicLabel"></strong>. The number stays the same.</p>
+
+          <p class="form-err" x-show="err.form" x-text="err.form"></p>
+          <div class="actions">
+            <button type="button" class="btn ghost" x-on:click="cancelEditEpic">Cancel</button>
+            <button type="submit" class="btn primary" x-bind:disabled="saving">Save title</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="page" x-show="page === 'edit-story'">
+        <nav class="crumb"><button class="crumb-link" x-on:click="goBoard">Overview</button>
+          <span class="crumb-sep">›</span><span class="crumb-cur">Edit story</span></nav>
+        <h1 class="page-title">Edit story</h1>
+        <p class="page-sub">Changes the title and release in your <span class="mono">BACKLOG.yaml</span>.
+          Its tasks, test cases and description are untouched.</p>
+
+        <form x-on:submit.prevent="submitEditStory" novalidate>
+          <div class="field">
+            <label for="editStoryTitle">Title</label>
+            <input type="text" id="editStoryTitle" name="title" required maxlength="120" autocomplete="off"
+                   x-model="form.title">
+            <p class="field-err" x-show="err.title" x-text="err.title"></p>
+          </div>
+
+          <div class="field">
+            <label for="editStoryRelease">Release <span class="opt">optional</span></label>
+            <input type="text" id="editStoryRelease" name="release" maxlength="20" autocomplete="off"
+                   x-model="form.release" placeholder="V1">
+          </div>
+
+          <p class="assigned">Editing <strong x-text="storyCode"></strong>. Its code and its folder stay the same.</p>
+
+          <p class="form-err" x-show="err.form" x-text="err.form"></p>
+          <div class="actions">
+            <button type="button" class="btn ghost" x-on:click="cancelEditStory">Cancel</button>
+            <button type="submit" class="btn primary" x-bind:disabled="saving">Save changes</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="page" x-show="page === 'add-story'">
+        <nav class="crumb"><button class="crumb-link" x-on:click="goBoard">Overview</button>
+          <span class="crumb-sep">›</span><span class="crumb-cur">Add user story</span></nav>
+        <h1 class="page-title">Add a user story</h1>
+        <p class="page-sub">Adds a new story to an existing epic in your <span class="mono">BACKLOG.yaml</span>.</p>
+
+        <form x-on:submit.prevent="submitStory" novalidate>
+          <div class="field">
+            <label for="storyEpic">Epic</label>
+            <select id="storyEpic" name="epicNumber" required x-model="form.epicNumber">
+              <template x-for="epic in epics" :key="epic.number">
+                <option x-bind:value="epic.number" x-text="epic.optionLabel"></option>
+              </template>
+            </select>
+            <p class="field-err" x-show="err.epicNumber" x-text="err.epicNumber"></p>
+          </div>
+
+          <div class="field">
+            <label for="storyTitle">Title</label>
+            <input type="text" id="storyTitle" name="title" required maxlength="120" autocomplete="off"
+                   x-model="form.title" placeholder="Export to CSV">
+            <p class="field-err" x-show="err.title" x-text="err.title"></p>
+          </div>
+
+          <div class="field">
+            <label for="storyRelease">Release <span class="opt">optional</span></label>
+            <input type="text" id="storyRelease" name="release" maxlength="20" autocomplete="off"
+                   x-model="form.release" placeholder="V1">
+          </div>
+
+          <div class="field">
+            <label for="storyDescription">Description <span class="opt">optional</span></label>
+            <textarea id="storyDescription" name="description" class="editor short" rows="8"
+                      x-model="form.description" spellcheck="true"
+                      placeholder="As a user, I want … so that …"></textarea>
+            <p class="hint">Markdown. Saved as the story's <span class="mono">SKILL.md</span>, alongside a
+               scaffold for tasks and acceptance criteria. You can leave it empty and write it later.</p>
+          </div>
+
+          <p class="assigned">This will be <strong x-text="nextStoryCode"></strong>, the next free code.</p>
+
+          <p class="form-err" x-show="err.form" x-text="err.form"></p>
+          <div class="actions">
+            <button type="button" class="btn ghost" x-on:click="goBoard">Cancel</button>
+            <button type="submit" class="btn primary" x-bind:disabled="saving">Add user story</button>
+          </div>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <!-- =========================== status picker =========================== -->
+  <div class="pop" role="listbox" aria-label="Set status"
+       x-show="picker.open" x-bind:class="picker.cls" x-bind:style="picker.pos" x-on:click.outside="closePicker">
+    <div class="pop-cap" x-show="!picker.narrow">SET STATUS</div>
+    <template x-for="option in picker.options" :key="option.label">
+      <button class="pop-row" role="option" x-bind:class="optionClass(option)"
+              x-bind:aria-selected="isCurrentOption(option)" x-on:click="choose(option)">
+        <span class="sq" x-bind:class="optionSquareClass(option)"></span>
+        <span x-show="!picker.narrow" x-text="option.emoji"></span>
+        <span class="grow" x-text="option.label"></span>
+        <span class="tick" x-show="isCurrentOption(option)">✓</span>
+      </button>
+    </template>
+  </div>
+
+  <!-- Deleting is the one action here that cannot be undone from the UI, so it asks first. Native
+       <dialog> gives the focus trap, Escape and backdrop for free; only the wording is filled in. -->
+  <dialog x-ref="confirm" aria-labelledby="confirmTitle">
+    <form method="dialog">
+      <h2 id="confirmTitle" x-text="confirm.title"></h2>
+      <p class="sub" x-text="confirm.body"></p>
+      <div class="actions">
+        <button type="submit" value="cancel" class="btn ghost">Cancel</button>
+        <button type="submit" value="delete" x-bind:class="confirm.okClass" x-text="confirm.okLabel"></button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Mobile bottom navigation. The design system's mobile pattern: destinations as labelled
+       icons, with the primary create action elevated in the centre. -->
+  <nav class="mobilenav" aria-label="Main">
+    <button class="mnav" x-bind:class="mnavClass('board')" x-on:click="goBoard" aria-label="Overview">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg>
+      <span>Overview</span>
+    </button>
+    <button class="mnav" x-bind:class="mnavClass('releases')" x-on:click="goReleases" aria-label="By release">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+      <span>Releases</span>
+    </button>
+    <button class="mnav mnav-add" x-on:click.stop="toggleAddMobile"
+            x-bind:aria-expanded="addOpen" aria-label="Add an epic or user story" aria-haspopup="menu">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      <span class="sr-only">Add</span>
+    </button>
+    <button class="mnav" x-on:click="reload" aria-label="Reload from file">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+      <span>Reload</span>
+    </button>
+    <!-- Projects rather than Configure. A sixth item would squeeze every label to an ellipsis, and
+         switching project is the more frequent of the two on a phone — Configure is reached from
+         the Projects page, which is where its settings now belong anyway. -->
+    <button class="mnav" x-bind:class="mnavClass('projects')" x-on:click="goProjects" aria-label="Projects">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+      <span>Projects</span>
+    </button>
+  </nav>
+
+  <!-- ============================== search ==============================
+       An overlay rather than a dropdown: results carry an excerpt, and an excerpt needs room. The
+       matched text is highlighted by rendering alternating spans from a precomputed array — no
+       HTML is assembled in JavaScript, so a story title can never become markup. -->
+  <div class="searchveil" x-show="search.open" x-on:click="closeSearch"></div>
+  <!-- The combobox pattern: the input keeps focus while the arrow keys move through the list, and
+       aria-activedescendant is what tells a screen reader which result is current. Moving real
+       focus into the list instead would take it out of the box you are still typing in. -->
+  <div class="searchpanel" x-show="search.open" role="dialog" aria-modal="true" aria-label="Search the backlog">
+    <div class="searchbar">
+      <span class="searchicon" aria-hidden="true">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+      </span>
+      <input type="text" id="searchBox" x-ref="searchBox" x-model="search.q" x-on:input="runSearch"
+             role="combobox" aria-controls="searchResults" aria-expanded="true" aria-autocomplete="list"
+             x-bind:aria-activedescendant="activeResultId"
+             x-on:keydown.escape="closeSearch" x-on:keydown.arrow-down.prevent="moveSearch(1)"
+             x-on:keydown.arrow-up.prevent="moveSearch(-1)" x-on:keydown.enter.prevent="openActiveResult"
+             autocomplete="off" spellcheck="false" placeholder="Search stories, tasks and test cases">
+      <button class="searchclose" x-on:click="closeSearch" aria-label="Close search">✕</button>
+    </div>
+
+    <div class="searchbody">
+      <p class="searchnote" x-show="search.loading">Reading the backlog…</p>
+      <p class="searchnote" x-show="search.hint" x-text="search.hintText"></p>
+
+      <div id="searchResults" role="listbox" aria-label="Search results">
+      <template x-for="(r, i) in search.results" :key="r.key">
+        <button class="searchhit" role="option" x-bind:id="r.id" x-bind:aria-selected="selectedFlag(i)"
+                x-bind:class="resultClass(i)" x-on:click="openSearchResult(r)">
+          <span class="hit-head">
+            <!-- An epic has no code and no status of its own, so it is labelled as what it is. -->
+            <span class="hit-badge" x-show="r.isEpic">EPIC</span>
+            <span class="hit-code mono" x-show="r.isStory">
+              <template x-for="p in r.codeParts"><span x-bind:class="p.hitClass" x-text="p.t"></span></template>
+            </span>
+            <span class="hit-title">
+              <template x-for="p in r.titleParts"><span x-bind:class="p.hitClass" x-text="p.t"></span></template>
+            </span>
+            <span class="chip sm" x-show="r.isStory" x-bind:class="r.statusClass" x-text="r.status"></span>
+          </span>
+          <span class="hit-epic" x-text="r.subtitle"></span>
+
+          <template x-for="x in r.excerpts">
+            <span class="hit-excerpt">
+              <span class="hit-kind" x-text="x.kind"></span>
+              <template x-for="p in x.parts"><span x-bind:class="p.hitClass" x-text="p.t"></span></template>
+            </span>
+          </template>
+
+          <span class="hit-more" x-show="r.moreLabel" x-text="r.moreLabel"></span>
+        </button>
+      </template>
+      </div>
+    </div>
+
+    <!-- Read out as the list changes, because the list itself is not what has focus. -->
+    <p class="sr-only" role="status" x-text="search.announce"></p>
+  </div>
+
+  <div class="toast" x-bind:class="toastClass" x-text="toastText" role="status" aria-live="polite"></div>
+</div>
+</body>
+</html>
