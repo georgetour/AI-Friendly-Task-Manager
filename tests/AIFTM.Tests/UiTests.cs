@@ -100,15 +100,22 @@ public class UiTests(UiFixture fx)
     [Fact]
     public async Task Epic_header_release_and_version_slots_line_up_into_columns()
     {
-        // A release (and version) is now shown on the epic header, not the story row — the sample
-        // backlog gives epic 0 a release and leaves epic 1 without one, which is the case that used
-        // to leave a slot collapsed and every control after it at a different x. The two-column
-        // "cur-set" and "epic-count" widths themselves are not stable — curLabel text differs
-        // between the current epic and the others — so the invariant checked here is the gap
+        // A release and a version are now shown on the epic header, not the story row — the sample
+        // backlog gives epic "Tooling" both, and leaves "Empty Epic" with neither, which is the case
+        // that used to leave a slot collapsed and every control after it at a different x. The
+        // two-column "cur-set" and "epic-count" widths themselves are not stable — curLabel text
+        // differs between the current epic and the others — so the invariant checked here is the gap
         // between the epic-open button and cur-set: it is spanned entirely by the (possibly hidden)
         // version and release vtags, and must be identical whether they hold text or not.
         var (page, _) = await fx.NewPageAsync(1280, 800);
         await page.GotoAsync(fx.BaseUrl);
+
+        // Proves the populated path actually rendered, not just that the layout has room for it —
+        // a field swapped for the wrong one (release text in the version slot, say) would still lay
+        // out identically but say the wrong thing.
+        var toolingHeader = page.Locator(".epic-head", new() { HasTextString = "Tooling" });
+        await Assertions.Expect(toolingHeader.Locator(".vtag").First).ToHaveTextAsync("0.1.0");
+        await Assertions.Expect(toolingHeader.Locator(".vtag").Last).ToHaveTextAsync("V1");
 
         var gaps = await page.Locator(".epic-head:visible").EvaluateAllAsync<double[]>(
             "els => els.map(e => Math.round(e.querySelector('.cur-set').getBoundingClientRect().left" +
