@@ -165,9 +165,32 @@ public class EndpointContractTests : IDisposable
     [Fact]
     public void An_unknown_epic_is_rejected_everywhere_it_can_be_named()
     {
-        Assert.Throws<BacklogValidationException>(() => _svc.RenameEpic(99, "Nope"));
+        Assert.Throws<BacklogValidationException>(() => _svc.EditEpic(99, "Nope", null, null));
         Assert.Throws<BacklogValidationException>(() => _svc.DeleteEpic(99));
         Assert.Throws<BacklogValidationException>(() => _svc.AddStory(99, "US-02", "Nope"));
+    }
+
+    // ---------- an epic's version and release ----------
+
+    [Fact]
+    public void An_over_long_epic_version_or_release_is_rejected_on_add_and_on_edit()
+    {
+        // Reachable with curl regardless of the <select>/<input> the form offers, so the cap is
+        // enforced here rather than trusted from the browser.
+        Assert.Throws<BacklogValidationException>(() => _svc.AddEpic(1, "Core", new string('x', 21), null));
+        Assert.Throws<BacklogValidationException>(() => _svc.AddEpic(1, "Core", null, new string('x', 21)));
+        Assert.Throws<BacklogValidationException>(() => _svc.EditEpic(0, "Tooling", new string('x', 21), null));
+        Assert.Throws<BacklogValidationException>(() => _svc.EditEpic(0, "Tooling", null, new string('x', 21)));
+    }
+
+    [Fact]
+    public void A_release_outside_the_roadmap_is_accepted_because_validation_only_warns_about_it()
+    {
+        // Rejecting here would make a hand-edited or converted release impossible to keep through
+        // an edit — Validate() already reports it as a warning, not an error.
+        var board = _svc.EditEpic(0, "Tooling", null, "Not-On-Roadmap");
+
+        Assert.Equal("Not-On-Roadmap", board.Epics.Single().Release);
     }
 
     // ---------- editing a story ----------

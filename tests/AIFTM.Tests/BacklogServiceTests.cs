@@ -196,19 +196,53 @@ public class BacklogServiceTests : IDisposable
     }
 
     [Fact]
-    public void RenameEpic_changes_only_the_title()
+    public void AddEpic_rejects_an_over_long_version_or_release()
     {
-        _svc.RenameEpic(0, "Delivery");
-
-        var epic = _svc.GetBoard().Epics.Single();
-        Assert.Equal("Delivery", epic.Title);
-        Assert.Single(epic.Stories);
+        Assert.Throws<BacklogValidationException>(() => _svc.AddEpic(1, "Core", new string('x', 21), null));
+        Assert.Throws<BacklogValidationException>(() => _svc.AddEpic(1, "Core", null, new string('x', 21)));
     }
 
     [Fact]
-    public void RenameEpic_rejects_an_unknown_epic()
+    public void EditEpic_sets_title_version_and_release_and_leaves_the_rest_alone()
     {
-        Assert.Throws<BacklogValidationException>(() => _svc.RenameEpic(9, "Nope"));
+        _svc.EditEpic(0, "Delivery", "0.2.0", "V2");
+
+        var epic = _svc.GetBoard().Epics.Single();
+        Assert.Equal(0, epic.Number);
+        Assert.Equal("Delivery", epic.Title);
+        Assert.Equal("0.2.0", epic.Version);
+        Assert.Equal("V2", epic.Release);
+        Assert.Single(epic.Stories);
+        Assert.Equal("US-01", epic.Stories[0].Code);
+    }
+
+    [Fact]
+    public void EditEpic_with_blank_version_and_release_clears_both_from_the_file()
+    {
+        _svc.EditEpic(0, "Delivery", "0.2.0", "V2");
+        _svc.EditEpic(0, "Delivery", "  ", " ");
+
+        var epic = _svc.GetBoard().Epics.Single();
+        Assert.Equal("", epic.Version);
+        Assert.Equal("", epic.Release);
+
+        var yaml = File.ReadAllText(Backlog);
+        Assert.DoesNotContain("version:", yaml);
+        Assert.DoesNotContain("release:", yaml);
+    }
+
+    [Fact]
+    public void EditEpic_rejects_an_over_long_version_or_release()
+    {
+        Assert.Throws<BacklogValidationException>(() => _svc.EditEpic(0, "Delivery", new string('x', 21), null));
+        Assert.Throws<BacklogValidationException>(() => _svc.EditEpic(0, "Delivery", null, new string('x', 21)));
+    }
+
+    [Fact]
+    public void EditEpic_rejects_an_unknown_epic()
+    {
+        var ex = Assert.Throws<BacklogValidationException>(() => _svc.EditEpic(9, "Nope", null, null));
+        Assert.Equal("There is no epic 9.", ex.Message);
     }
 
     [Fact]

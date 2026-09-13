@@ -900,14 +900,18 @@ document.addEventListener("alpine:init", () => {
       if(page === "projects") this.loadProjects();
       if(page === "add-project") this.form = { backlogPath:"", skillsPath:"" };
       if(page === "remove-project") this.form = { confirmName:"" };
-      if(page === "add-epic")  this.form = { title:"" };
+      if(page === "add-epic")  this.form = { title:"", version:"", release:"" };
       // seedEpic is set when Add is reached from inside an epic, so the dropdown already names the
       // epic you were looking at rather than the first one on the board.
       if(page === "add-story") this.form = { epicNumber: String(this.seedEpic != null ? this.seedEpic
                                                : (this.board.epics.length ? this.board.epics[0].number : 0)),
                                              title:"", description:"" };
       this.seedEpic = null;
-      if(page === "edit-epic") this.form = { title: this.epicOf(this.editingEpic) ? this.epicOf(this.editingEpic).title : "" };
+      if(page === "edit-epic"){
+        const epic = this.epicOf(this.editingEpic);
+        this.form = { title: epic ? epic.title : "", version: epic ? (epic.version || "") : "",
+                       release: epic ? (epic.release || "") : "" };
+      }
       if(page === "edit-story") this.form = { title: this.story ? this.story.title : "" };
       if(push !== false) this.navigate();
     },
@@ -943,7 +947,7 @@ document.addEventListener("alpine:init", () => {
     goAddEpic(){ this.openPage("add-epic"); },
     goAddStory(){ this.openPage("add-story"); },
     goAddStoryHere(){ this.seedEpic = this.epicNumber; this.openPage("add-story"); },
-    goRenameEpic(){ this.editingEpic = this.epicNumber; this.openPage("edit-epic"); },
+    goEditEpic(){ this.editingEpic = this.epicNumber; this.openPage("edit-epic"); },
     goEditStory(){ if(this.story) this.openPage("edit-story"); },
 
     /** Cancel returns you to what you were editing, not to the Overview. Dumping someone at the
@@ -1116,6 +1120,18 @@ document.addEventListener("alpine:init", () => {
     makeCurrentEpic(){ if(this.epic) return this.makeCurrent(this.epic); },
     get epicSectionClass(){ return ""; },
     get editingEpicLabel(){ return "Epic " + this.editingEpic; },
+
+    /** Release choices for the add- and edit-epic <select>. Adding starts from a blank epic, so
+     *  the roadmap alone is correct there; editing must also offer the epic's own release even
+     *  when it is not on the roadmap (legal — validation only warns), or saving the form
+     *  unchanged would silently drop it because the dropdown never offered it back. */
+    get epicReleaseOptions(){
+      const roadmap = this.board.roadmap || [];
+      if(this.page !== "edit-epic") return roadmap;
+      const current = this.epicOf(this.editingEpic);
+      const unlisted = current && current.release && !roadmap.includes(current.release);
+      return unlisted ? roadmap.concat([current.release]) : roadmap;
+    },
 
     /* ------------------------------------------------------ story view -- */
     storyByCode(code){
@@ -1615,7 +1631,8 @@ document.addEventListener("alpine:init", () => {
       this.saving = true;
       try{
         const number = this.nextEpicNumber;
-        this.board = decorate(await api("/api/epic", "POST", { number, title }));
+        this.board = decorate(await api("/api/epic", "POST",
+          { number, title, version: this.form.version, release: this.form.release }));
         // Open the epic just created, the same way adding a story opens the story. Returning to the
         // Overview meant the two add flows ended somewhere different for no reason, and left you to
         // find the thing you had just made.
@@ -1625,16 +1642,17 @@ document.addEventListener("alpine:init", () => {
       finally{ this.saving = false; }
     },
 
-    async submitRename(){
+    async submitEditEpic(){
       this.err = {};
       const title = this.require("title", "Give the epic a title.");
       if(!title) return;
       this.saving = true;
       try{
-        this.board = decorate(await api("/api/epic/" + this.editingEpic, "POST", { title }));
+        this.board = decorate(await api("/api/epic/" + this.editingEpic, "POST",
+          { title, version: this.form.version, release: this.form.release }));
         this.openEpicByNumber(this.editingEpic);
-        this.toast("Epic renamed");
-      }catch(e){ this.err.form = e.message || "The epic could not be renamed."; }
+        this.toast("Epic updated");
+      }catch(e){ this.err.form = e.message || "The epic could not be updated."; }
       finally{ this.saving = false; }
     },
 

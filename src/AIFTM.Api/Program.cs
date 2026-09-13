@@ -365,9 +365,9 @@ app.MapPost("/api/story", (AddStoryRequest r, BacklogService svc) =>
     catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
 });
 
-app.MapPost("/api/epic/{number:int}", (int number, RenameRequest r, BacklogService svc) =>
+app.MapPost("/api/epic/{number:int}", (int number, EditEpicRequest r, BacklogService svc) =>
 {
-    try { return Results.Json(svc.RenameEpic(number, r.Title)); }
+    try { return Results.Json(svc.EditEpic(number, r.Title, r.Version, r.Release)); }
     catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
 });
 
@@ -458,5 +458,5 @@ sealed record RemoveProjectRequest(string Path, string ConfirmName);
 sealed record AddEpicRequest(int Number, string Title, string? Version, string? Release);
 sealed record AddStoryRequest(int EpicNumber, string Code, string Title, string? Description);
 sealed record SaveSkillRequest(string Path, string Content);
-sealed record RenameRequest(string Title);
+sealed record EditEpicRequest(string Title, string? Version, string? Release);
 sealed record EditStoryRequest(string Title);

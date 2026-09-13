@@ -1,3 +1,5 @@
+using System.Net.Http;
+using AIFTM.Api.Backlog;
 using Microsoft.Playwright;
 
 namespace AIFTM.Tests;
@@ -123,6 +125,108 @@ public class UiTests(UiFixture fx)
 
         Assert.True(gaps.Length >= 2, "Expected at least two visible epic headers.");
         Assert.Single(gaps.Distinct());
+    }
+
+    [Fact]
+    public async Task The_add_and_edit_epic_forms_set_the_version_and_the_release()
+    {
+        // Without this, an epic that conversion filed under the wrong release could only be moved
+        // by hand-editing the file. The add form proves a release can be chosen at creation; the
+        // edit form proves a version can be added afterwards without losing the release already set.
+        var (page, errors) = await fx.NewPageAsync();
+        using var http = new HttpClient();
+        try
+        {
+            await page.GotoAsync($"{fx.BaseUrl}/add-epic");
+
+            await page.Locator("#epicTitle").FillAsync("Reporting");
+            await page.Locator("#epicRelease").SelectOptionAsync("V1");
+            await page.Locator("button:has-text('Add epic')").ClickAsync();
+
+            // Submitting opens the epic's own page — which shows no version or release, by design:
+            // an epic page lists its stories and nothing else. The badges are the Overview's.
+            await page.GotoAsync(fx.BaseUrl);
+            var header = page.Locator(".epic-head", new() { HasTextString = "Reporting" });
+            await Assertions.Expect(header.Locator(".vtag").Last).ToHaveTextAsync("V1");
+
+            await header.Locator(".epic-open").ClickAsync();
+            await page.Locator("button:has-text('Edit epic')").ClickAsync();
+            await Assertions.Expect(page).ToHaveURLAsync($"{fx.BaseUrl}/edit-epic");
+
+            // Prefilled from the epic being edited, the same way the title already was.
+            await Assertions.Expect(page.Locator("#editEpicRelease")).ToHaveValueAsync("V1");
+            await page.Locator("#editEpicVersion").FillAsync("1.2.0");
+            // Scoped to the form actually on screen: "Save changes" is also the edit-story submit
+            // label, and hidden pages stay in the DOM rather than being removed.
+            await page.Locator("form:has(#editEpicVersion) button:has-text('Save changes')").ClickAsync();
+
+            await page.GotoAsync(fx.BaseUrl);
+            var updated = page.Locator(".epic-head", new() { HasTextString = "Reporting" });
+            await Assertions.Expect(updated.Locator(".vtag").First).ToHaveTextAsync("1.2.0");
+            await Assertions.Expect(updated.Locator(".vtag").Last).ToHaveTextAsync("V1");
+
+            // Proves the write reached the file, not just the in-memory board the UI already trusted.
+            var epic = YamlIndex.Parse(File.ReadAllText(fx.PrimaryBacklogPath))
+                .Epics.Single(e => e.Title == "Reporting");
+            Assert.Equal("1.2.0", epic.Version);
+            Assert.Equal("V1", epic.Release);
+
+            UiFixture.AssertNoConsoleErrors(errors);
+        }
+        finally
+        {
+            // One app serves the whole "ui" collection, so an epic left behind here would change
+            // what every later test — including the alignment test above — counts and measures.
+            var left = YamlIndex.Parse(File.ReadAllText(fx.PrimaryBacklogPath))
+                .Epics.FirstOrDefault(e => e.Title == "Reporting");
+            if (left is not null) await http.DeleteAsync($"{fx.BaseUrl}/api/epic/{left.Number}");
+        }
+    }
+
+    [Fact]
+    public async Task An_unlisted_release_survives_an_edit_that_leaves_it_untouched()
+    {
+        // A release outside the roadmap is legal — Validate() only warns about it — so it can reach
+        // an epic through conversion or a hand-edit. The edit form used to offer only roadmap
+        // entries, so opening and saving it with nothing changed silently reset the release to
+        // Unscheduled because the dropdown had nowhere to put the value it started with.
+        const int number = 950;
+        using var http = new HttpClient();
+        var body = new StringContent(
+            System.Text.Json.JsonSerializer.Serialize(
+                new { number, title = "Legacy Work", version = (string?)null, release = "Legacy" }),
+            System.Text.Encoding.UTF8, "application/json");
+        (await http.PostAsync($"{fx.BaseUrl}/api/epic", body)).EnsureSuccessStatusCode();
+
+        try
+        {
+            var (page, errors) = await fx.NewPageAsync();
+            await page.GotoAsync(fx.BaseUrl);
+
+            await page.Locator(".epic-head", new() { HasTextString = "Legacy Work" }).Locator(".epic-open").ClickAsync();
+            await page.Locator("button:has-text('Edit epic')").ClickAsync();
+
+            // The unlisted value is offered back rather than silently dropped from the picker.
+            await Assertions.Expect(page.Locator("#editEpicRelease")).ToHaveValueAsync("Legacy");
+
+            await page.Locator("form:has(#editEpicVersion) button:has-text('Save changes')").ClickAsync();
+
+            await page.GotoAsync(fx.BaseUrl);
+            var header = page.Locator(".epic-head", new() { HasTextString = "Legacy Work" });
+            await Assertions.Expect(header.Locator(".vtag").Last).ToHaveTextAsync("Legacy");
+
+            var epic = YamlIndex.Parse(File.ReadAllText(fx.PrimaryBacklogPath))
+                .Epics.Single(e => e.Title == "Legacy Work");
+            Assert.Equal("Legacy", epic.Release);
+
+            UiFixture.AssertNoConsoleErrors(errors);
+        }
+        finally
+        {
+            // Same reason as above: this epic's unusually wide release tag ("Legacy" versus "V1")
+            // is exactly the kind of leftover state the alignment test would otherwise trip over.
+            await http.DeleteAsync($"{fx.BaseUrl}/api/epic/{number}");
+        }
     }
 
     [Fact]

@@ -134,8 +134,8 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
         if (number < 0 || number > 999)
             throw new BacklogValidationException("Use an epic number between 0 and 999.");
         title = Require(title, "Give the epic a title.", 120);
-        version = (version ?? "").Trim();
-        release = (release ?? "").Trim();
+        version = Optional(version, 20);
+        release = Optional(release, 20);
 
         lock (_lock)
         {
@@ -148,9 +148,13 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
         }
     }
 
-    public Board RenameEpic(int number, string title)
+    /// <summary>Changes an epic's title, version and release. The number, its stories and their
+    /// order are never touched — an edit here has no way to reach them.</summary>
+    public Board EditEpic(int number, string title, string? version, string? release)
     {
         title = Require(title, "Give the epic a title.", 120);
+        version = Optional(version, 20);
+        release = Optional(release, 20);
 
         lock (_lock)
         {
@@ -160,7 +164,9 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
 
             return Save(board with
             {
-                Epics = board.Epics.Select(e => e.Number == number ? e with { Title = title } : e).ToList(),
+                Epics = board.Epics.Select(e => e.Number == number
+                    ? e with { Title = title, Version = version, Release = release }
+                    : e).ToList(),
             });
         }
     }
@@ -290,6 +296,15 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
     {
         value = (value ?? "").Trim();
         if (value.Length == 0) throw new BacklogValidationException(message);
+        if (value.Length > max) throw new BacklogValidationException($"Keep this under {max} characters.");
+        return value;
+    }
+
+    /// <summary>An optional short label — an epic's version or release. Blank is a real value (not
+    /// scheduled, no version), so it is never rejected, only capped.</summary>
+    private static string Optional(string? value, int max)
+    {
+        value = (value ?? "").Trim();
         if (value.Length > max) throw new BacklogValidationException($"Keep this under {max} characters.");
         return value;
     }

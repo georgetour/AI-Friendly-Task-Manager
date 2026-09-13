@@ -95,4 +95,22 @@ public class MarkupContractTests
 
         Assert.Contains("section.releaseLabel", html, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Both_epic_forms_offer_a_version_field_and_a_release_picker()
+    {
+        // Without this, an epic filed under the wrong release by conversion could only be moved by
+        // hand-editing the file — the whole reason this task exists.
+        var html = Read("index.html");
+
+        var addForm = Regex.Match(html, @"page === 'add-epic'.*?</form>", RegexOptions.Singleline).Value;
+        var editForm = Regex.Match(html, @"page === 'edit-epic'.*?</form>", RegexOptions.Singleline).Value;
+
+        foreach (var form in new[] { addForm, editForm })
+        {
+            Assert.Contains(@"name=""version""", form, StringComparison.Ordinal);
+            Assert.Contains(@"<select", form, StringComparison.Ordinal);
+            Assert.Contains(@"name=""release""", form, StringComparison.Ordinal);
+        }
+    }
 }
