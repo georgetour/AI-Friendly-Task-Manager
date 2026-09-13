@@ -217,6 +217,38 @@ public class BacklogServiceTests : IDisposable
     }
 
     [Fact]
+    public void EditEpic_moves_an_epic_from_one_release_to_a_different_one()
+    {
+        // Unset-to-value, value-to-blank and value-to-itself all pass without ever proving the one
+        // scenario this task exists for: an epic already on a release, filed under the wrong one,
+        // moved to a different concrete release.
+        File.WriteAllText(Backlog, """
+            project: Test
+            roadmap: [V1, V2]
+            epics:
+              - number: 0
+                title: Tooling
+                release: V1
+                stories:
+                  - code: US-01
+                    title: Board
+                    status: Not Yet Started
+                    folder: board
+            """);
+
+        _svc.EditEpic(0, "Tooling", null, "V2");
+
+        var epic = _svc.GetBoard().Epics.Single();
+        Assert.Equal(0, epic.Number);
+        Assert.Equal("V2", epic.Release);
+        Assert.Single(epic.Stories);
+        Assert.Equal("US-01", epic.Stories[0].Code);
+
+        var yaml = File.ReadAllText(Backlog);
+        Assert.Contains("release: V2", yaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void EditEpic_with_blank_version_and_release_clears_both_from_the_file()
     {
         _svc.EditEpic(0, "Delivery", "0.2.0", "V2");

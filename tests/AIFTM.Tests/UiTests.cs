@@ -230,6 +230,53 @@ public class UiTests(UiFixture fx)
     }
 
     [Fact]
+    public async Task An_epic_can_move_from_one_release_to_a_different_one()
+    {
+        // The scenario this task exists for: an epic already on a release — here, one outside the
+        // roadmap entirely, the harder of the two cases — corrected through the form to a different,
+        // roadmap-listed release, rather than by hand-editing the file. Unset-to-value, value-to-
+        // blank and value-to-itself (the other two tests either side of this one) do not cover this.
+        const int number = 951;
+        using var http = new HttpClient();
+        var body = new StringContent(
+            System.Text.Json.JsonSerializer.Serialize(
+                new { number, title = "Relocated Work", version = (string?)null, release = "Legacy" }),
+            System.Text.Encoding.UTF8, "application/json");
+        (await http.PostAsync($"{fx.BaseUrl}/api/epic", body)).EnsureSuccessStatusCode();
+
+        try
+        {
+            var (page, errors) = await fx.NewPageAsync();
+            await page.GotoAsync(fx.BaseUrl);
+
+            await page.Locator(".epic-head", new() { HasTextString = "Relocated Work" }).Locator(".epic-open").ClickAsync();
+            await page.Locator("button:has-text('Edit epic')").ClickAsync();
+
+            // Starts on the unlisted release, offered back the same way the test above proves.
+            await Assertions.Expect(page.Locator("#editEpicRelease")).ToHaveValueAsync("Legacy");
+            await page.Locator("#editEpicRelease").SelectOptionAsync("V1");
+            await page.Locator("form:has(#editEpicVersion) button:has-text('Save changes')").ClickAsync();
+
+            await page.GotoAsync(fx.BaseUrl);
+            var header = page.Locator(".epic-head", new() { HasTextString = "Relocated Work" });
+            await Assertions.Expect(header.Locator(".vtag").Last).ToHaveTextAsync("V1");
+
+            // Proves the write reached the file, not just the in-memory board the UI already trusted.
+            var epic = YamlIndex.Parse(File.ReadAllText(fx.PrimaryBacklogPath))
+                .Epics.Single(e => e.Title == "Relocated Work");
+            Assert.Equal("V1", epic.Release);
+
+            UiFixture.AssertNoConsoleErrors(errors);
+        }
+        finally
+        {
+            // Same reason as the tests either side of this one: an epic left behind here would skew
+            // the alignment test's gap measurement for every test that runs after it.
+            await http.DeleteAsync($"{fx.BaseUrl}/api/epic/{number}");
+        }
+    }
+
+    [Fact]
     public async Task The_header_names_the_current_project_but_is_not_a_control()
     {
         // Orientation only — it says which board you are on. Switching is a page, not a header
