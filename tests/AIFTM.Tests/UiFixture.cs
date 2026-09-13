@@ -103,7 +103,7 @@ public sealed class UiFixture : IAsyncLifetime
     /// <summary>The project every other test expects to be open.</summary>
     public string PrimaryBacklogPath => Path.Combine(_root, "BACKLOG.yaml");
 
-    /// <summary>A writable copy of the shipped demo — 5 epics, 24 stories, real tasks and test
+    /// <summary>A writable copy of the shipped demo — 8 epics, 24 stories, real tasks and test
     /// cases. Copied rather than pointed at, because searching it is a read but selecting a project
     /// is a write, and `templates/` is part of the repo.</summary>
     public string DemoBacklogPath

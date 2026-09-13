@@ -8,7 +8,7 @@ away — no save button, no database, no account.
 ## Try it right now
 
 **[georgetour.github.io/AI-Friendly-Task-Manager](https://georgetour.github.io/AI-Friendly-Task-Manager/)** — the whole
-board, on a demo backlog of 5 epics and 24 stories. No sign-in, no install, nothing to accept.
+board, on a demo backlog of 8 epics and 24 stories. No sign-in, no install, nothing to accept.
 
 Click statuses, tick tasks, search, edit a description. It is the real application, not a video or a
 mock-up: the same HTML, CSS and JavaScript this repo serves, with every answer the API would give
@@ -73,7 +73,7 @@ Open **http://localhost:5249**. It's the same address every time. `Ctrl+C` stops
 > ```
 
 That's the whole setup. Nothing to install, configure or sign up for — the first run shows a demo
-project with 5 epics and 24 stories so you can click around before pointing it at anything of yours.
+project with 8 epics and 24 stories so you can click around before pointing it at anything of yours.
 The demo is a real, editable copy, and it's gitignored, so nothing you do to it is at stake.
 
 ## Where everything is stored

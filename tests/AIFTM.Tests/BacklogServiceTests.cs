@@ -227,4 +227,76 @@ public class BacklogServiceTests : IDisposable
     {
         Assert.True(_svc.Validate().Ok);
     }
+
+    [Fact]
+    public void GetBoard_converts_an_old_file_once_and_leaves_it_alone_after()
+    {
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        var path = Path.Combine(dir, "BACKLOG.yaml");
+        File.WriteAllText(path, """
+            project: Acme App
+            roadmap: [V1, V1.5]
+            epics:
+            - number: 1
+              title: Core Application
+              stories:
+              - code: US-03
+                title: Local Setup
+                status: Done
+                release: V1
+                folder: local-setup
+              - code: US-11
+                title: Email
+                status: Not Yet Started
+                release: V1.5
+                folder: email
+            """);
+
+        var svc = new BacklogService(() => path, () => Path.Combine(dir, "skills"));
+
+        var board = svc.GetBoard();
+        var afterFirst = File.ReadAllText(path);
+
+        Assert.Equal("V1", Assert.Single(board.Epics).Release);
+        Assert.Contains("release: V1", afterFirst, StringComparison.Ordinal);
+        Assert.DoesNotContain("release: V1.5", afterFirst, StringComparison.Ordinal);
+
+        svc.GetBoard();
+
+        Assert.Equal(afterFirst, File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void GetBoard_still_opens_an_old_file_it_cannot_write()
+    {
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        var path = Path.Combine(dir, "BACKLOG.yaml");
+        const string legacy = """
+            project: Acme App
+            roadmap: [V1]
+            epics:
+            - number: 1
+              title: Core Application
+              stories:
+              - code: US-03
+                title: Local Setup
+                status: Done
+                release: V1
+                folder: local-setup
+            """;
+        File.WriteAllText(path, legacy);
+        File.SetAttributes(path, FileAttributes.ReadOnly);
+
+        try
+        {
+            var board = new BacklogService(() => path, () => Path.Combine(dir, "skills")).GetBoard();
+
+            Assert.Equal("V1", Assert.Single(board.Epics).Release);
+            Assert.Equal(legacy, File.ReadAllText(path));
+        }
+        finally
+        {
+            File.SetAttributes(path, FileAttributes.Normal);
+        }
+    }
 }

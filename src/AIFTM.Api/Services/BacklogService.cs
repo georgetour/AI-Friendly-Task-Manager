@@ -22,9 +22,29 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
     public string BacklogPath => resolveBacklog();
     public string SkillsRoot => resolveSkills();
 
+    /// <summary>
+    /// The board, converting the file first if it is still in the shape that kept the release on each
+    /// story. Written back rather than lifted only in memory: otherwise every read would redo the work
+    /// and the file would stay one shape behind for good.
+    ///
+    /// The write is the same whole-file save every click already performs, and it happens once — the
+    /// converted file parses with nothing left to lift.
+    /// </summary>
     public Board GetBoard()
     {
-        lock (_lock) return Read();
+        lock (_lock)
+        {
+            var board = Read();
+            if (!board.Migrated) return board;
+
+            // A backlog this process cannot write — a read-only checkout, a file another program has
+            // locked — must still open. Before conversion existed a read never wrote, so failing here
+            // would turn a board that opened yesterday into a 422 today. The lifted board is correct in
+            // memory; the conversion is simply tried again on the next read or the next click.
+            try { return Save(board); }
+            catch (IOException) { return board; }
+            catch (UnauthorizedAccessException) { return board; }
+        }
     }
 
     public StoryDetail GetStory(string code)
