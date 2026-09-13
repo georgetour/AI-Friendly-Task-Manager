@@ -140,7 +140,7 @@ public class BacklogServiceTests : IDisposable
     [Fact]
     public void AddStory_creates_a_slug_folder_with_a_SKILL_md()
     {
-        _svc.AddStory(0, "US-02", "Checkout and Payment", "V1");
+        _svc.AddStory(0, "US-02", "Checkout and Payment");
 
         var story = _svc.GetBoard().Epics[0].Stories.Single(s => s.Code == "US-02");
         Assert.Equal("checkout-and-payment", story.Folder);
@@ -150,7 +150,7 @@ public class BacklogServiceTests : IDisposable
     [Fact]
     public void AddStory_gives_a_duplicate_title_its_own_folder()
     {
-        _svc.AddStory(0, "US-02", "Board", "V1");
+        _svc.AddStory(0, "US-02", "Board");
 
         var story = _svc.GetBoard().Epics[0].Stories.Single(s => s.Code == "US-02");
         Assert.Equal("board-2", story.Folder);
@@ -159,13 +159,13 @@ public class BacklogServiceTests : IDisposable
     [Fact]
     public void AddStory_rejects_a_duplicate_code()
     {
-        Assert.Throws<BacklogValidationException>(() => _svc.AddStory(0, "US-01", "Another", "V1"));
+        Assert.Throws<BacklogValidationException>(() => _svc.AddStory(0, "US-01", "Another"));
     }
 
     [Fact]
     public void AddStory_rejects_an_unknown_epic()
     {
-        Assert.Throws<BacklogValidationException>(() => _svc.AddStory(9, "US-02", "Nope", "V1"));
+        Assert.Throws<BacklogValidationException>(() => _svc.AddStory(9, "US-02", "Nope"));
     }
 
     [Fact]
@@ -189,10 +189,10 @@ public class BacklogServiceTests : IDisposable
     [Fact]
     public void AddEpic_appends_and_rejects_a_duplicate_number()
     {
-        _svc.AddEpic(1, "Core Application");
+        _svc.AddEpic(1, "Core Application", null, null);
         Assert.Equal(2, _svc.GetBoard().Epics.Count);
 
-        Assert.Throws<BacklogValidationException>(() => _svc.AddEpic(1, "Again"));
+        Assert.Throws<BacklogValidationException>(() => _svc.AddEpic(1, "Again", null, null));
     }
 
     [Fact]

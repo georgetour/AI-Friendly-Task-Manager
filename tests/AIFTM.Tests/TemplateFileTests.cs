@@ -157,12 +157,11 @@ public class TemplateFileTests
     }
 
     [Fact]
-    public void Every_release_used_by_a_story_is_declared_in_the_roadmap()
+    public void Every_release_used_by_an_epic_is_declared_in_the_roadmap()
     {
         var board = Template();
 
-        var used = board.Epics.SelectMany(e => e.Stories)
-            .Select(s => s.Release).Where(r => !string.IsNullOrWhiteSpace(r)).Distinct();
+        var used = board.Epics.Select(e => e.Release).Where(r => !string.IsNullOrWhiteSpace(r)).Distinct();
 
         Assert.All(used, r => Assert.Contains(r, board.Roadmap));
     }

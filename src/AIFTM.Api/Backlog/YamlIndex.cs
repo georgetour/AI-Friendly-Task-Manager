@@ -30,6 +30,12 @@ public static class YamlIndex
     private sealed class EpicDto
     {
         public int Number { get; set; }
+
+        // Nullable and left null when empty, so the serializer's OmitNull keeps a backlog that uses
+        // neither field byte-identical to what this wrote before they existed.
+        public string? Version { get; set; }
+        public string? Release { get; set; }
+
         public string Title { get; set; } = "";
         public List<StoryDto> Stories { get; set; } = new();
     }
@@ -39,7 +45,11 @@ public static class YamlIndex
         public string Code { get; set; } = "";
         public string Title { get; set; } = "";
         public string Status { get; set; } = "Not Yet Started";
-        public string Release { get; set; } = "";
+
+        // Legacy input only. A file written before the release moved up to the epic still carries this,
+        // and LiftReleasesToEpics reads it; Write never sets it, so OmitNull drops it from the output.
+        public string? Release { get; set; }
+
         public string Folder { get; set; } = "";
     }
 
@@ -66,11 +76,13 @@ public static class YamlIndex
 
         var epics = dto.Epics.Select(e => new Epic(
             e.Number,
+            e.Version ?? "",
+            e.Release ?? "",
             e.Title ?? "",
             (e.Stories ?? new List<StoryDto>())
                 .Select(s => new Story(s.Code ?? "", s.Title ?? "",
                                        string.IsNullOrWhiteSpace(s.Status) ? "Not Yet Started" : s.Status,
-                                       s.Release ?? "", s.Folder ?? ""))
+                                       s.Folder ?? ""))
                 .ToList()
         )).ToList();
 
@@ -89,13 +101,14 @@ public static class YamlIndex
         Epics = board.Epics.Select(e => new EpicDto
         {
             Number = e.Number,
+            Version = string.IsNullOrWhiteSpace(e.Version) ? null : e.Version,
+            Release = string.IsNullOrWhiteSpace(e.Release) ? null : e.Release,
             Title = e.Title,
             Stories = e.Stories.Select(s => new StoryDto
             {
                 Code = s.Code,
                 Title = s.Title,
                 Status = s.Status,
-                Release = s.Release,
                 Folder = s.Folder,
             }).ToList(),
         }).ToList(),

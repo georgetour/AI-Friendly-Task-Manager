@@ -12,15 +12,30 @@ namespace AIFTM.Api.Backlog;
 ///
 /// One number at the top rather than a flag on each epic: two epics cannot both claim to be current
 /// if there is only one place to say it.</param>
+/// <param name="Migrated">True when <see cref="YamlIndex.Parse"/> lifted a legacy story-level
+/// release onto its epic. Not part of the file — it tells BacklogService the text on disk is now
+/// one shape behind the board it just handed back.</param>
 public sealed record Board(
     string Project,
     IReadOnlyList<string> Roadmap,
     IReadOnlyList<Epic> Epics,
-    int? CurrentEpic = null);
+    int? CurrentEpic = null)
+{
+    public bool Migrated { get; init; }
+}
 
+/// <param name="Version">The epic's own version, e.g. "0.3.0". A label, never a key — nothing looks
+/// an epic up by it, because <paramref name="Number"/> is the identity.</param>
+/// <param name="Release">Which release in the roadmap this epic belongs to. Empty is legitimate:
+/// work that is not scheduled yet.</param>
 /// <param name="Slug">URL segment, e.g. "core-application". Derived from the title by
 /// <see cref="Slugs"/> on every read — never stored in the file, so it can't drift from the title.</param>
-public sealed record Epic(int Number, string Title, IReadOnlyList<Story> Stories)
+public sealed record Epic(
+    int Number,
+    string Version,
+    string Release,
+    string Title,
+    IReadOnlyList<Story> Stories)
 {
     public string Slug { get; init; } = "";
 }
@@ -34,7 +49,6 @@ public sealed record Story(
     string Code,
     string Title,
     string Status,
-    string Release,
     string Folder)
 {
     public string Slug { get; init; } = "";

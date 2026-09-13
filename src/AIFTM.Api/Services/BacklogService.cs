@@ -109,11 +109,13 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
         }
     }
 
-    public Board AddEpic(int number, string title)
+    public Board AddEpic(int number, string title, string? version, string? release)
     {
         if (number < 0 || number > 999)
             throw new BacklogValidationException("Use an epic number between 0 and 999.");
         title = Require(title, "Give the epic a title.", 120);
+        version = (version ?? "").Trim();
+        release = (release ?? "").Trim();
 
         lock (_lock)
         {
@@ -121,7 +123,7 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
             if (board.Epics.Any(e => e.Number == number))
                 throw new BacklogValidationException($"Epic {number} already exists. Pick another number.");
 
-            var epics = board.Epics.Append(new Epic(number, title, new List<Story>())).ToList();
+            var epics = board.Epics.Append(new Epic(number, version, release, title, new List<Story>())).ToList();
             return Save(board with { Epics = epics });
         }
     }
@@ -158,11 +160,10 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
         }
     }
 
-    public Board AddStory(int epicNumber, string code, string title, string? release, string? description = null)
+    public Board AddStory(int epicNumber, string code, string title, string? description = null)
     {
         code = Require(code, "Give the story a code, for example US-25.", 20);
         title = Require(title, "Give the story a title.", 120);
-        release = (release ?? "").Trim();
 
         lock (_lock)
         {
@@ -176,25 +177,23 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
             var folder = FindFreeFolderName(board, title, code);
             StoryFolder.Create(resolveSkills(), folder, code, title, description);
 
-            var story = new Story(code, title, "Not Yet Started", release, folder);
+            var story = new Story(code, title, "Not Yet Started", folder);
             return Save(Replace(board, epic with { Stories = epic.Stories.Append(story).ToList() }));
         }
     }
 
-    /// <summary>Renames a story and sets its release. The folder is deliberately left where it is:
-    /// it is recorded explicitly in the index, so a rename cannot orphan it — and moving a directory
-    /// someone may have open is a far worse failure than a folder whose name has drifted from its
-    /// title.</summary>
-    public Board EditStory(string code, string title, string? release)
+    /// <summary>Renames a story. The folder is deliberately left where it is: it is recorded
+    /// explicitly in the index, so a rename cannot orphan it — and moving a directory someone may
+    /// have open is a far worse failure than a folder whose name has drifted from its title.</summary>
+    public Board EditStory(string code, string title)
     {
         title = Require(title, "Give the story a title.", 120);
-        release = (release ?? "").Trim();
 
         lock (_lock)
         {
             var board = Read();
             var (epic, story) = Locate(board, code);
-            return Save(Replace(board, epic, story with { Title = title, Release = release }));
+            return Save(Replace(board, epic, story with { Title = title }));
         }
     }
 

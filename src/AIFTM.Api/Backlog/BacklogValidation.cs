@@ -89,10 +89,6 @@ public static class BacklogValidation
                     issues.Add(new ValidationIssue("error",
                         $"\"{story.Status}\" is not a status. Use one of: {string.Join(", ", Statuses)}.", where));
 
-                if (!string.IsNullOrWhiteSpace(story.Release) && !board.Roadmap.Contains(story.Release))
-                    issues.Add(new ValidationIssue("warning",
-                        $"{story.Code} is set to release {story.Release}, which is not in the roadmap.", where));
-
                 if (string.IsNullOrWhiteSpace(story.Folder))
                 {
                     issues.Add(new ValidationIssue("error", $"{story.Code} has no folder.", where));

@@ -230,17 +230,9 @@ public class BacklogValidationTests : IDisposable
         Assert.Contains(report.Issues, i => i.Message.Contains("Finished"));
     }
 
-    [Fact]
-    public void A_release_not_in_the_roadmap_is_a_warning()
-    {
-        WriteIndex(Good.Replace("release: V1", "release: V9"));
-        Directory.CreateDirectory(Path.Combine(Skills, "board"));
-
-        var report = BacklogValidation.Check(Backlog, Skills);
-
-        Assert.True(report.Ok);
-        Assert.Contains(report.Issues, i => i.Severity == "warning" && i.Message.Contains("V9"));
-    }
+    // The release-not-in-roadmap warning moved with the field: release now belongs to the epic, not
+    // the story, and BacklogValidation no longer checks it here — Task 4 adds the epic-level
+    // replacement, with its own test, once the check exists again.
 
     [Fact]
     public void An_unknown_test_case_status_names_the_file_it_is_in()

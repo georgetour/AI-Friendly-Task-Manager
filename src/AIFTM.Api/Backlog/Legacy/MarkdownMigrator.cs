@@ -50,9 +50,12 @@ public static class MarkdownMigrator
                     notes.Add($"{s.Code}: its old skill file was {s.SkillPath} — copy it over "
                             + $"skills/{folder}/SKILL.md if you want to keep it.");
 
-                stories.Add(new Story(s.Code, s.Title, NormaliseStatus(s.StatusLabel), s.Release, folder));
+                stories.Add(new Story(s.Code, s.Title, NormaliseStatus(s.StatusLabel), folder));
             }
-            epics.Add(new Epic(e.Number, e.Title, stories));
+            // Version and release are left empty here: lifting a story's old release onto its epic
+            // is Task 2's rule (earliest-in-roadmap-order across the epic's stories), and duplicating
+            // it here would give the same decision two places to disagree from.
+            epics.Add(new Epic(e.Number, "", "", e.Title, stories));
         }
 
         var board = new Board(

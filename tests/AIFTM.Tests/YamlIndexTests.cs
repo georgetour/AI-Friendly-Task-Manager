@@ -6,15 +6,16 @@ public class YamlIndexTests
 {
     private const string Yaml = """
         project: Acme App
-        roadmap: [V0.1, V1]
+        roadmap: [1.0.0, 1.5.0]
         epics:
           - number: 0
+            version: 0.1.0
+            release: 1.0.0
             title: Developer Tooling
             stories:
               - code: US-01
                 title: Backlog Board
                 status: Done
-                release: V0.1
                 folder: backlog-board
         """;
 
@@ -24,15 +25,42 @@ public class YamlIndexTests
         var board = YamlIndex.Parse(Yaml);
 
         Assert.Equal("Acme App", board.Project);
-        Assert.Equal(new[] { "V0.1", "V1" }, board.Roadmap);
+        Assert.Equal(new[] { "1.0.0", "1.5.0" }, board.Roadmap);
         var epic = Assert.Single(board.Epics);
         Assert.Equal(0, epic.Number);
         Assert.Equal("Developer Tooling", epic.Title);
         var story = Assert.Single(epic.Stories);
         Assert.Equal("US-01", story.Code);
         Assert.Equal("Done", story.Status);
-        Assert.Equal("V0.1", story.Release);
         Assert.Equal("backlog-board", story.Folder);
+    }
+
+    [Fact]
+    public void Parse_reads_version_and_release_from_the_epic()
+    {
+        var board = YamlIndex.Parse(Yaml);
+
+        var epic = Assert.Single(board.Epics);
+        Assert.Equal(0, epic.Number);
+        Assert.Equal("0.1.0", epic.Version);
+        Assert.Equal("1.0.0", epic.Release);
+        Assert.Equal("Developer Tooling", epic.Title);
+        var story = Assert.Single(epic.Stories);
+        Assert.Equal("US-01", story.Code);
+        Assert.Equal("Done", story.Status);
+        Assert.Equal("backlog-board", story.Folder);
+    }
+
+    [Fact]
+    public void Write_omits_version_and_release_when_an_epic_has_neither()
+    {
+        var board = new Board("Acme App", new[] { "1.0.0" },
+            new[] { new Epic(0, "", "", "Developer Tooling", new List<Story>()) });
+
+        var yaml = YamlIndex.Write(board);
+
+        Assert.DoesNotContain("version:", yaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("release:", yaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -55,7 +83,7 @@ public class YamlIndexTests
         Assert.Equal("US-01", again.Epics[0].Stories[0].Code);
         Assert.Equal("Done", again.Epics[0].Stories[0].Status);
         Assert.Equal("backlog-board", again.Epics[0].Stories[0].Folder);
-        Assert.Equal(new[] { "V0.1", "V1" }, again.Roadmap);
+        Assert.Equal(new[] { "1.0.0", "1.5.0" }, again.Roadmap);
     }
 
     [Fact]
