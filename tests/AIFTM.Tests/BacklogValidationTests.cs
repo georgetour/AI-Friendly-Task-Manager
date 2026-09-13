@@ -18,6 +18,12 @@ public class BacklogValidationTests : IDisposable
 
     private void WriteIndex(string yaml) => File.WriteAllText(Backlog, yaml);
 
+    private ValidationReport CheckYaml(string yaml)
+    {
+        WriteIndex(yaml);
+        return BacklogValidation.Check(Backlog, Skills);
+    }
+
     private const string Good = """
         project: Test
         roadmap: [V1]
@@ -230,9 +236,60 @@ public class BacklogValidationTests : IDisposable
         Assert.Contains(report.Issues, i => i.Message.Contains("Finished"));
     }
 
-    // The release-not-in-roadmap warning moved with the field: release now belongs to the epic, not
-    // the story, and BacklogValidation no longer checks it here — Task 4 adds the epic-level
-    // replacement, with its own test, once the check exists again.
+    [Fact]
+    public void An_epic_release_missing_from_the_roadmap_is_a_warning()
+    {
+        var report = CheckYaml("""
+            project: Acme App
+            roadmap: [1.0.0]
+            epics:
+            - number: 1
+              release: 9.9.9
+              title: Core Application
+              stories: []
+            """);
+
+        var issue = Assert.Single(report.Issues, i => i.Message.Contains("9.9.9", StringComparison.Ordinal));
+        Assert.Equal("warning", issue.Severity);
+        Assert.True(report.Ok);
+    }
+
+    [Fact]
+    public void An_epic_with_no_release_is_not_an_issue()
+    {
+        var report = CheckYaml("""
+            project: Acme App
+            roadmap: [1.0.0]
+            epics:
+            - number: 1
+              title: Core Application
+              stories: []
+            """);
+
+        Assert.DoesNotContain(report.Issues, i => i.Message.Contains("release", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Two_epics_sharing_an_unlisted_release_each_point_at_their_own_line()
+    {
+        var report = CheckYaml("""
+            project: Acme App
+            roadmap: [1.0.0]
+            epics:
+            - number: 1
+              release: 9.9.9
+              title: First
+              stories: []
+            - number: 2
+              release: 9.9.9
+              title: Second
+              stories: []
+            """);
+
+        var warnings = report.Issues.Where(i => i.Message.Contains("9.9.9", StringComparison.Ordinal)).ToList();
+        Assert.Equal(2, warnings.Count);
+        Assert.NotEqual(warnings[0].Where, warnings[1].Where);
+    }
 
     [Fact]
     public void An_unknown_test_case_status_names_the_file_it_is_in()
