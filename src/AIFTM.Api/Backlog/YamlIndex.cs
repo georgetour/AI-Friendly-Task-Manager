@@ -74,7 +74,9 @@ public static class YamlIndex
         var dto = (string.IsNullOrWhiteSpace(yaml) ? null : Reader.Deserialize<IndexDto>(yaml))
                   ?? new IndexDto();
 
-        var epics = dto.Epics.Select(e => new Epic(
+        var migrated = LiftReleasesToEpics(dto);
+
+        var epics = (dto.Epics ?? new List<EpicDto>()).Select(e => new Epic(
             e.Number,
             e.Version ?? "",
             e.Release ?? "",
@@ -90,7 +92,70 @@ public static class YamlIndex
         // pointed at was deleted, and inferring one is better than badging nothing.
         var current = dto.CurrentEpic is int n && epics.Exists(e => e.Number == n) ? n : (int?)null;
 
-        return new Board(dto.Project ?? "", dto.Roadmap ?? new List<string>(), AssignSlugs(epics), current);
+        return new Board(dto.Project ?? "", dto.Roadmap ?? new List<string>(), AssignSlugs(epics), current)
+        {
+            Migrated = migrated,
+        };
+    }
+
+    /// <summary>
+    /// Moves a story-level release up to the epic that owns the story — the shape every backlog written
+    /// before the release belonged to the epic is still in.
+    ///
+    /// An epic adopts the earliest release its stories name, in roadmap order, because that is where the
+    /// work starts; a release the roadmap does not list sorts last. Release names are never rewritten:
+    /// "V1" stays "V1", since only the file's author knows whether that meant 1.0.0 or 0.1.0.
+    ///
+    /// Never throws. An exception here would reach /api/board as a 422, and the devcontainer's start
+    /// guard reads any HTTP failure as "not running" — so it would start a second instance, which dies
+    /// unable to bind the port. A file this cannot make sense of yields epics with no release, which is
+    /// a legitimate state that renders as Unscheduled.
+    /// </summary>
+    /// <returns>True when anything was lifted, so the caller knows the text on disk is a shape behind.</returns>
+    private static bool LiftReleasesToEpics(IndexDto dto)
+    {
+        var epics = dto.Epics ?? new List<EpicDto>();
+        var roadmap = dto.Roadmap ?? new List<string>();
+
+        var carriesLegacy = epics.Any(e =>
+            (e.Stories ?? new List<StoryDto>()).Any(s => !string.IsNullOrWhiteSpace(s.Release)));
+
+        if (!carriesLegacy) return false;
+
+        foreach (var epic in epics)
+        {
+            var stories = epic.Stories ?? new List<StoryDto>();
+
+            if (string.IsNullOrWhiteSpace(epic.Release))
+            {
+                var adopted = EarliestRelease(stories.Select(s => s.Release), roadmap);
+                if (adopted.Length > 0) epic.Release = adopted;
+            }
+
+            // Cleared whether or not this epic adopted one: the field does not exist on a story any
+            // more, and leaving it would write it straight back out on the next save.
+            foreach (var story in stories) story.Release = null;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// The release an epic belongs to, given the releases its stories name: the earliest in roadmap
+    /// order, with any the roadmap does not list sorting last. Empty when none are named. The one place
+    /// this rule lives — the YAML lift and the markdown migrator both call it, so they cannot disagree.
+    /// </summary>
+    internal static string EarliestRelease(IEnumerable<string?> releases, IReadOnlyList<string> roadmap) =>
+        releases.Select(r => (r ?? "").Trim())
+                .Where(r => r.Length > 0)
+                .OrderBy(r => IndexIn(roadmap, r))
+                .FirstOrDefault() ?? "";
+
+    private static int IndexIn(IReadOnlyList<string> roadmap, string release)
+    {
+        for (var i = 0; i < roadmap.Count; i++)
+            if (roadmap[i] == release) return i;
+        return int.MaxValue;
     }
 
     public static string Write(Board board) => Writer.Serialize(new IndexDto

@@ -210,4 +210,173 @@ public class YamlIndexTests
 
         Assert.Throws<YamlDotNet.Core.YamlException>(() => YamlIndex.Parse(yaml));
     }
+
+    private const string LegacyYaml = """
+        project: Acme App
+        roadmap: [V1, V1.5, V4]
+        epics:
+          - number: 1
+            title: Core Application
+            stories:
+              - code: US-03
+                title: Local Setup
+                status: Done
+                release: V1
+                folder: local-setup
+              - code: US-11
+                title: Email Notifications
+                status: Not Yet Started
+                release: V1.5
+                folder: email-notifications
+              - code: US-12
+                title: Reporting
+                status: Not Yet Started
+                release: V4
+                folder: reporting
+        """;
+
+    [Fact]
+    public void Parse_lifts_a_straddling_epic_to_its_earliest_release_in_roadmap_order()
+    {
+        var board = YamlIndex.Parse(LegacyYaml);
+
+        var epic = Assert.Single(board.Epics);
+        Assert.Equal("V1", epic.Release);
+        Assert.True(board.Migrated);
+    }
+
+    [Fact]
+    public void Parse_lifts_an_agreeing_epic_silently()
+    {
+        var yaml = """
+            project: Acme App
+            roadmap: [V1]
+            epics:
+              - number: 1
+                title: Core Application
+                stories:
+                  - code: US-03
+                    title: Local Setup
+                    status: Done
+                    release: V1
+                    folder: local-setup
+            """;
+
+        var board = YamlIndex.Parse(yaml);
+
+        Assert.Equal("V1", Assert.Single(board.Epics).Release);
+    }
+
+    [Fact]
+    public void Parse_leaves_an_epic_with_no_story_releases_unscheduled()
+    {
+        var yaml = """
+            project: Acme App
+            roadmap: [V1]
+            epics:
+              - number: 1
+                title: Core Application
+                stories:
+                  - code: US-03
+                    title: Local Setup
+                    status: Done
+                    folder: local-setup
+              - number: 2
+                title: Later
+                stories:
+                  - code: US-04
+                    title: Something
+                    status: Done
+                    release: V1
+                    folder: something
+            """;
+
+        var board = YamlIndex.Parse(yaml);
+
+        Assert.Equal("", board.Epics[0].Release);
+        Assert.Equal("V1", board.Epics[1].Release);
+    }
+
+    [Fact]
+    public void Parse_sorts_a_release_missing_from_the_roadmap_last()
+    {
+        var yaml = """
+            project: Acme App
+            roadmap: [V1]
+            epics:
+              - number: 1
+                title: Core Application
+                stories:
+                  - code: US-03
+                    title: Ghost
+                    status: Done
+                    release: V9
+                    folder: ghost
+                  - code: US-04
+                    title: Real
+                    status: Done
+                    release: V1
+                    folder: real
+            """;
+
+        var board = YamlIndex.Parse(yaml);
+
+        Assert.Equal("V1", Assert.Single(board.Epics).Release);
+    }
+
+    [Fact]
+    public void Parse_keeps_an_epic_release_that_is_already_set()
+    {
+        var yaml = """
+            project: Acme App
+            roadmap: [V1, V2]
+            epics:
+              - number: 1
+                release: V2
+                title: Core Application
+                stories:
+                  - code: US-03
+                    title: Local Setup
+                    status: Done
+                    release: V1
+                    folder: local-setup
+            """;
+
+        var board = YamlIndex.Parse(yaml);
+
+        Assert.Equal("V2", Assert.Single(board.Epics).Release);
+    }
+
+    [Fact]
+    public void Parse_does_not_flag_a_file_that_is_already_in_the_new_shape()
+    {
+        var board = YamlIndex.Parse(Yaml);
+
+        Assert.False(board.Migrated);
+    }
+
+    [Fact]
+    public void Parse_is_idempotent_across_a_write()
+    {
+        var once = YamlIndex.Parse(LegacyYaml);
+        var text = YamlIndex.Write(once);
+
+        var twice = YamlIndex.Parse(text);
+
+        Assert.False(twice.Migrated);
+        Assert.Equal("V1", Assert.Single(twice.Epics).Release);
+        Assert.DoesNotContain("release: V1.5", text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("epics:")]
+    [InlineData("epics:\n- number: 1\n  stories:\n")]
+    [InlineData("epics:\n- number: 1\n  stories:\n  - code: X\n    release: \"\"\n")]
+    [InlineData("roadmap:\nepics:\n- number: 1\n  stories:\n  - code: X\n    release: V1\n")]
+    public void Parse_never_throws_on_a_file_it_cannot_make_sense_of(string yaml)
+    {
+        var board = YamlIndex.Parse(yaml);
+
+        Assert.NotNull(board);
+    }
 }

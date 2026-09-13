@@ -52,10 +52,11 @@ public static class MarkdownMigrator
 
                 stories.Add(new Story(s.Code, s.Title, NormaliseStatus(s.StatusLabel), folder));
             }
-            // Version and release are left empty here: lifting a story's old release onto its epic
-            // is Task 2's rule (earliest-in-roadmap-order across the epic's stories), and duplicating
-            // it here would give the same decision two places to disagree from.
-            epics.Add(new Epic(e.Number, "", "", e.Title, stories));
+            // The same rule YamlIndex.Parse applies when it lifts a legacy story-level release onto
+            // its epic, so a hand-migrated file and one lifted on read agree on where an epic sits
+            // in the roadmap rather than each guessing its own way.
+            var release = YamlIndex.EarliestRelease(e.Stories.Select(s => s.Release), legacy.RoadmapVersions);
+            epics.Add(new Epic(e.Number, "", release, e.Title, stories));
         }
 
         var board = new Board(
