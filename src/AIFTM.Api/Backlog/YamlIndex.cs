@@ -76,12 +76,13 @@ public static class YamlIndex
 
         var migrated = LiftReleasesToEpics(dto);
 
-        var epics = (dto.Epics ?? new List<EpicDto>()).Select(e => new Epic(
+        var epics = (dto.Epics ?? new List<EpicDto>()).Where(e => e is not null).Select(e => new Epic(
             e.Number,
             e.Version ?? "",
             e.Release ?? "",
             e.Title ?? "",
             (e.Stories ?? new List<StoryDto>())
+                .Where(s => s is not null)
                 .Select(s => new Story(s.Code ?? "", s.Title ?? "",
                                        string.IsNullOrWhiteSpace(s.Status) ? "Not Yet Started" : s.Status,
                                        s.Folder ?? ""))
@@ -114,17 +115,19 @@ public static class YamlIndex
     /// <returns>True when anything was lifted, so the caller knows the text on disk is a shape behind.</returns>
     private static bool LiftReleasesToEpics(IndexDto dto)
     {
-        var epics = dto.Epics ?? new List<EpicDto>();
+        // A bare "-" list item deserializes to a null element — valid YAML, and one that carries no
+        // code, title, status or folder, so skipping it loses nothing.
+        var epics = (dto.Epics ?? new List<EpicDto>()).Where(e => e is not null).ToList();
         var roadmap = dto.Roadmap ?? new List<string>();
 
         var carriesLegacy = epics.Any(e =>
-            (e.Stories ?? new List<StoryDto>()).Any(s => !string.IsNullOrWhiteSpace(s.Release)));
+            (e.Stories ?? new List<StoryDto>()).Where(s => s is not null).Any(s => !string.IsNullOrWhiteSpace(s.Release)));
 
         if (!carriesLegacy) return false;
 
         foreach (var epic in epics)
         {
-            var stories = epic.Stories ?? new List<StoryDto>();
+            var stories = (epic.Stories ?? new List<StoryDto>()).Where(s => s is not null).ToList();
 
             if (string.IsNullOrWhiteSpace(epic.Release))
             {

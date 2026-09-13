@@ -325,6 +325,35 @@ public class YamlIndexTests
     }
 
     [Fact]
+    public void Parse_orders_by_roadmap_position_not_by_string_or_story_order()
+    {
+        // V10 sorts before V2 as a string, and is named first here — a fixture that only an actual
+        // roadmap-index lookup, not ordinal comparison or "first story wins", can get right.
+        var yaml = """
+            project: Acme App
+            roadmap: [V2, V10]
+            epics:
+              - number: 1
+                title: Core Application
+                stories:
+                  - code: US-03
+                    title: Later
+                    status: Done
+                    release: V10
+                    folder: later
+                  - code: US-04
+                    title: Earlier
+                    status: Done
+                    release: V2
+                    folder: earlier
+            """;
+
+        var board = YamlIndex.Parse(yaml);
+
+        Assert.Equal("V2", Assert.Single(board.Epics).Release);
+    }
+
+    [Fact]
     public void Parse_keeps_an_epic_release_that_is_already_set()
     {
         var yaml = """
@@ -373,6 +402,9 @@ public class YamlIndexTests
     [InlineData("epics:\n- number: 1\n  stories:\n")]
     [InlineData("epics:\n- number: 1\n  stories:\n  - code: X\n    release: \"\"\n")]
     [InlineData("roadmap:\nepics:\n- number: 1\n  stories:\n  - code: X\n    release: V1\n")]
+    [InlineData("epics:\n- \n")]
+    [InlineData("epics:\n- number: 1\n  stories:\n  -\n")]
+    [InlineData("epics:\n- \n- number: 2\n  stories:\n  - code: X\n    release: V1\n")]
     public void Parse_never_throws_on_a_file_it_cannot_make_sense_of(string yaml)
     {
         var board = YamlIndex.Parse(yaml);
