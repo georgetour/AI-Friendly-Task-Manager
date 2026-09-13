@@ -272,11 +272,11 @@ public sealed class UiFixture : IAsyncLifetime
             epics:
               - number: 0
                 title: Tooling
+                release: V1
                 stories:
                   - code: US-01
                     title: Backlog Board
                     status: Done
-                    release: V1
                     folder: board
                   - code: US-02
                     title: Status Write Back
@@ -286,8 +286,8 @@ public sealed class UiFixture : IAsyncLifetime
                 title: Empty Epic
             """);
 
-        // One story with a release and one without: that difference is what used to knock the
-        // status column out of line.
+        // One epic has a release, one does not: that difference is what used to knock the epic
+        // header's own columns out of line, now that the release moved from the story to the epic.
         File.WriteAllText(Path.Combine(_root, "skills", "board", "SKILL.md"),
             "---\nname: board\n---\n\n# Backlog Board\n\n## Description\n\nThe board.\n");
         File.WriteAllText(Path.Combine(_root, "skills", "write-back", "SKILL.md"),

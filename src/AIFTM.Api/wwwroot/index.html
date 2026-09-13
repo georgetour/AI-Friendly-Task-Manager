@@ -261,6 +261,12 @@
                 <span class="epic-num" x-text="section.epicNumber"></span>
                 <span class="epic-name" x-text="section.title"></span>
               </button>
+              <!-- Version and release are epic-level, not per story. Hidden rather than removed
+                   when absent, so the header's columns do not shift between an epic that names one
+                   and one that does not — outside the epic-open button for the same reason cur-set
+                   is: a button cannot nest interactive content. -->
+              <span class="vtag" x-bind:class="section.versionSlotClass" x-text="section.versionLabel"></span>
+              <span class="vtag" x-bind:class="section.releaseSlotClass" x-text="section.releaseLabel"></span>
               <!-- The badge is the control, as designed: it reads CURRENT EPIC on the one you are
                    working in and "Set as current" on the others, so the way to change it is the
                    thing that shows it. Outside the epic-open button — a button cannot nest. -->
@@ -351,10 +357,6 @@
                 <span class="row-name" x-text="story.title"></span>
               </button>
               <span class="spacer"></span>
-              <!-- Always rendered, hidden when empty rather than removed: a release is optional, so
-                   x-show made the slot collapse and every status chip after it landed at a
-                   different x. Reserving the width keeps the two right-hand columns straight. -->
-              <span class="vtag" x-bind:class="story.releaseSlotClass" x-text="story.release"></span>
               <button class="chip row-badge" x-bind:class="story.statusClass" x-on:click.stop="openStatusPicker(story, $el)">
                 <span x-text="story.emoji"></span>
                 <span x-text="story.status"></span>
@@ -376,7 +378,6 @@
       <section class="detail" x-show="isStoryView">
         <div class="detail-meta">
           <span class="scode lg" x-text="storyCode"></span>
-          <span class="vtag lg" x-show="storyRelease" x-text="storyRelease"></span>
         </div>
 
         <!-- tabindex="-1" so opening a search result can move focus here. Not in the tab order:
@@ -393,7 +394,7 @@
           </button>
           <div class="spacer"></div>
           <div class="rowacts">
-            <button class="actbtn" x-on:click="goEditStory" title="Edit title and release" aria-label="Edit title and release">
+            <button class="actbtn" x-on:click="goEditStory" title="Edit title" aria-label="Edit title">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h10M4 17h7"></path></svg>
               <span class="lbl">Edit story</span>
             </button>
@@ -754,7 +755,7 @@
         <nav class="crumb"><button class="crumb-link" x-on:click="goBoard">Overview</button>
           <span class="crumb-sep">›</span><span class="crumb-cur">Edit story</span></nav>
         <h1 class="page-title">Edit story</h1>
-        <p class="page-sub">Changes the title and release in your <span class="mono">BACKLOG.yaml</span>.
+        <p class="page-sub">Changes the title in your <span class="mono">BACKLOG.yaml</span>.
           Its tasks, test cases and description are untouched.</p>
 
         <form x-on:submit.prevent="submitEditStory" novalidate>
@@ -763,12 +764,6 @@
             <input type="text" id="editStoryTitle" name="title" required maxlength="120" autocomplete="off"
                    x-model="form.title">
             <p class="field-err" x-show="err.title" x-text="err.title"></p>
-          </div>
-
-          <div class="field">
-            <label for="editStoryRelease">Release <span class="opt">optional</span></label>
-            <input type="text" id="editStoryRelease" name="release" maxlength="20" autocomplete="off"
-                   x-model="form.release" placeholder="V1">
           </div>
 
           <p class="assigned">Editing <strong x-text="storyCode"></strong>. Its code and its folder stay the same.</p>
@@ -803,12 +798,6 @@
             <input type="text" id="storyTitle" name="title" required maxlength="120" autocomplete="off"
                    x-model="form.title" placeholder="Export to CSV">
             <p class="field-err" x-show="err.title" x-text="err.title"></p>
-          </div>
-
-          <div class="field">
-            <label for="storyRelease">Release <span class="opt">optional</span></label>
-            <input type="text" id="storyRelease" name="release" maxlength="20" autocomplete="off"
-                   x-model="form.release" placeholder="V1">
           </div>
 
           <div class="field">

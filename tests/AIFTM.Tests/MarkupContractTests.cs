@@ -67,12 +67,32 @@ public class MarkupContractTests
     [Fact]
     public void The_release_slot_is_hidden_rather_than_removed()
     {
-        // Whether the columns actually line up is asserted in a browser, in UiTests — measuring
-        // rendered positions rather than matching stylesheet text. This only pins the markup
-        // decision behind it: hidden when empty, never removed.
+        // A story no longer carries a release — the epic does — so the slot that used to hide
+        // rather than collapse moved to the epic header. Whether the columns actually line up is
+        // asserted in a browser, in UiTests — measuring rendered positions rather than matching
+        // stylesheet text. This only pins the markup decision behind it: hidden when empty, never
+        // removed.
         var html = Read("index.html");
 
-        Assert.Contains(@"x-bind:class=""story.releaseSlotClass""", html);
-        Assert.DoesNotContain(@"<span class=""vtag"" x-show=""story.release""", html);
+        Assert.Contains(@"x-bind:class=""section.releaseSlotClass""", html);
+        Assert.Contains(@"x-bind:class=""section.versionSlotClass""", html);
+        Assert.DoesNotContain(@"<span class=""vtag"" x-show=""section.release""", html);
+    }
+
+    [Fact]
+    public void The_story_row_no_longer_binds_a_release()
+    {
+        var html = Read("index.html");
+
+        Assert.DoesNotContain("story.release", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("story.releaseSlotClass", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_epic_header_shows_the_release()
+    {
+        var html = Read("index.html");
+
+        Assert.Contains("section.releaseLabel", html, StringComparison.Ordinal);
     }
 }

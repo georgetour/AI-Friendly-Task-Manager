@@ -98,8 +98,6 @@ function decorate(board){
     const stories = (epic.stories || []).map(story => Object.assign({}, story, {
       statusClass: CLASS_FOR[story.status] || "st-nys",
       emoji:       EMOJI_FOR[story.status] || "⬜",
-      // A release is optional, so this slot is hidden rather than removed — see the row markup.
-      releaseSlotClass: story.release ? "" : "empty",
     }));
 
     const count = stories.length;
@@ -110,6 +108,12 @@ function decorate(board){
       railTitle:   epic.title + " · " + plural(count, "story", "stories"),
       activity:    Math.max(0, ...stories.map(s => ACTIVITY[s.status] || 0)),
       isCurrent:   false,
+      // Hidden rather than removed when absent, so the header's columns do not shift between an
+      // epic that names a release and one that does not.
+      releaseLabel:     epic.release || "",
+      releaseSlotClass: epic.release ? "" : "empty",
+      versionLabel:     epic.version || "",
+      versionSlotClass: epic.version ? "" : "empty",
     });
   });
 
@@ -901,11 +905,10 @@ document.addEventListener("alpine:init", () => {
       // epic you were looking at rather than the first one on the board.
       if(page === "add-story") this.form = { epicNumber: String(this.seedEpic != null ? this.seedEpic
                                                : (this.board.epics.length ? this.board.epics[0].number : 0)),
-                                             title:"", release:"", description:"" };
+                                             title:"", description:"" };
       this.seedEpic = null;
       if(page === "edit-epic") this.form = { title: this.epicOf(this.editingEpic) ? this.epicOf(this.editingEpic).title : "" };
-      if(page === "edit-story") this.form = { title: this.story ? this.story.title : "",
-                                              release: this.story ? this.story.release : "" };
+      if(page === "edit-story") this.form = { title: this.story ? this.story.title : "" };
       if(push !== false) this.navigate();
     },
 
@@ -1044,6 +1047,8 @@ document.addEventListener("alpine:init", () => {
           countLabel: e.countLabel, rows: e.stories.map(s => ({ s, ctx: "" })),
           curOn: e.isCurrent, curClass: e.currentClass,
           curLabel: e.currentLabel, curTitle: e.currentTitle,
+          releaseLabel: e.releaseLabel, releaseSlotClass: e.releaseSlotClass,
+          versionLabel: e.versionLabel, versionSlotClass: e.versionSlotClass,
         }));
       }
       const groups = this.releaseGroups();
@@ -1058,23 +1063,24 @@ document.addEventListener("alpine:init", () => {
     releaseGroups(){
       const order = this.board.roadmap;
       const map = new Map();
-      this.epics.forEach(e => e.stories.forEach(s => {
-        const key = s.release || "Unscheduled";
+      this.epics.forEach(e => {
+        const key = e.release || "Unscheduled";
         if(!map.has(key)) map.set(key, []);
-        map.get(key).push({ s, ctx: e.title });
-      }));
+        e.stories.forEach(s => map.get(key).push({ s, ctx: e.title }));
+      });
       const keys = Array.from(map.keys()).sort((a, b) => {
         if(a === "Unscheduled") return 1;
         if(b === "Unscheduled") return -1;
         const ia = order.indexOf(a), ib = order.indexOf(b);
         return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
       });
-      // curOn/curClass/curLabel/curTitle so a release section has the same shape as an epic one:
-      // its epic header is hidden, but Alpine evaluates the bindings either way.
+      // curOn/curClass/curLabel/curTitle/releaseLabel/etc so a release section has the same shape
+      // as an epic one: its epic header is hidden, but Alpine evaluates the bindings either way.
       return keys.map(tag => ({
         key: "r" + tag, kind: "release", title: tag, clickable: true, epicNumber: -1,
         countLabel: plural(map.get(tag).length, "story", "stories"), rows: map.get(tag),
         curOn: false, curClass: "", curLabel: "", curTitle: "",
+        releaseLabel: "", releaseSlotClass: "empty", versionLabel: "", versionSlotClass: "empty",
       }));
     },
 
@@ -1124,7 +1130,6 @@ document.addEventListener("alpine:init", () => {
     get story(){ return this.storyByCode(this.storyCode); },
     get storyEpic(){ return this.epics.find(e => e.stories.some(s => s.code === this.storyCode)) || null; },
     get storyTitle(){ return this.story ? this.story.title : ""; },
-    get storyRelease(){ return this.story ? this.story.release : ""; },
     get storyStatusClass(){ return this.story ? this.story.statusClass : ""; },
     get storyStatusLabel(){ return this.story ? this.story.status : ""; },
     get storyEmoji(){ return this.story ? this.story.emoji : ""; },
@@ -1642,7 +1647,7 @@ document.addEventListener("alpine:init", () => {
       this.saving = true;
       try{
         this.board = decorate(await api("/api/story/" + encodeURIComponent(code), "POST", {
-          title, release: (this.form.release || "").trim(),
+          title,
         }));
         // The slug follows the title, so the URL this story lives at has just changed. Re-open it
         // by code and let routePath() write the new address.
@@ -1664,7 +1669,6 @@ document.addEventListener("alpine:init", () => {
           epicNumber: Number(this.form.epicNumber),
           code: this.nextStoryCode,
           title,
-          release: (this.form.release || "").trim(),
           description: (this.form.description || "").trim(),
         }));
         // Open the story that was just created rather than dropping back to the Overview — you

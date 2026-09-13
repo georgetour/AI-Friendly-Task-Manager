@@ -98,18 +98,24 @@ public class UiTests(UiFixture fx)
     }
 
     [Fact]
-    public async Task Status_chips_and_release_tags_line_up_into_columns()
+    public async Task Epic_header_release_and_version_slots_line_up_into_columns()
     {
-        // One story has a release and one does not — the case that used to leave the slot collapsed
-        // and every chip after it at a different x.
+        // A release (and version) is now shown on the epic header, not the story row — the sample
+        // backlog gives epic 0 a release and leaves epic 1 without one, which is the case that used
+        // to leave a slot collapsed and every control after it at a different x. The two-column
+        // "cur-set" and "epic-count" widths themselves are not stable — curLabel text differs
+        // between the current epic and the others — so the invariant checked here is the gap
+        // between the epic-open button and cur-set: it is spanned entirely by the (possibly hidden)
+        // version and release vtags, and must be identical whether they hold text or not.
         var (page, _) = await fx.NewPageAsync(1280, 800);
         await page.GotoAsync(fx.BaseUrl);
 
-        var lefts = await page.Locator(".story-row:visible .chip.row-badge")
-                              .EvaluateAllAsync<double[]>("els => els.map(e => Math.round(e.getBoundingClientRect().left))");
+        var gaps = await page.Locator(".epic-head:visible").EvaluateAllAsync<double[]>(
+            "els => els.map(e => Math.round(e.querySelector('.cur-set').getBoundingClientRect().left" +
+            " - e.querySelector('.epic-open').getBoundingClientRect().right))");
 
-        Assert.True(lefts.Length >= 2, "Expected at least two visible story rows.");
-        Assert.Single(lefts.Distinct());
+        Assert.True(gaps.Length >= 2, "Expected at least two visible epic headers.");
+        Assert.Single(gaps.Distinct());
     }
 
     [Fact]
