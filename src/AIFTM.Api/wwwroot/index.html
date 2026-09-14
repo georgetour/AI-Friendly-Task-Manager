@@ -265,8 +265,10 @@
                    when absent, so the header's columns do not shift between an epic that names one
                    and one that does not — outside the epic-open button for the same reason cur-set
                    is: a button cannot nest interactive content. -->
-              <span class="vtag" x-bind:class="section.versionSlotClass" x-text="section.versionLabel"></span>
-              <span class="vtag" x-bind:class="section.releaseSlotClass" x-text="section.releaseLabel"></span>
+              <span class="vtag" x-bind:class="section.versionSlotClass" x-text="section.versionLabel"
+                    x-bind:title="section.versionLabel"></span>
+              <span class="vtag" x-bind:class="section.releaseSlotClass" x-text="section.releaseLabel"
+                    x-bind:title="section.releaseLabel"></span>
               <!-- The badge is the control, as designed: it reads CURRENT EPIC on the one you are
                    working in and "Set as current" on the others, so the way to change it is the
                    thing that shows it. Outside the epic-open button — a button cannot nest. -->

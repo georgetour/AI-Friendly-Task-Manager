@@ -163,6 +163,68 @@ public class UiTests(UiFixture fx)
     }
 
     [Fact]
+    public async Task Epic_header_labels_stay_readable_when_truncated_and_untruncated_when_short()
+    {
+        // The vtag slot above is a fixed 60px so headers stay in column — a label that does not
+        // fit is ellipsized rather than pushing the layout. Truncation with no way to read the
+        // rest would just trade one bug for another, so every vtag carries its full value as a
+        // title. The other half of that trade only holds if the labels this app actually ships —
+        // a version or a roadmap release, both two to five characters in every template and test
+        // fixture — never need the title in the first place, on any screen down to 320px, where
+        // the mobile stylesheet raises .vtag's own font-size and so needs more room, not less.
+        const int number = 952;
+        using var http = new HttpClient();
+        var body = new StringContent(
+            System.Text.Json.JsonSerializer.Serialize(
+                new { number, title = "Long Label Epic", version = (string?)null, release = "Scaling-Phase-2" }),
+            System.Text.Encoding.UTF8, "application/json");
+        (await http.PostAsync($"{fx.BaseUrl}/api/epic", body)).EnsureSuccessStatusCode();
+
+        try
+        {
+            var (desktop, _) = await fx.NewPageAsync(1280, 800);
+            await desktop.GotoAsync(fx.BaseUrl);
+
+            // The long label actually truncates — otherwise this test would prove nothing — and
+            // the full value is still readable through the title the fix added.
+            var longTag = desktop.Locator(".epic-head", new() { HasTextString = "Long Label Epic" })
+                .Locator(".vtag").Last;
+            await Assertions.Expect(longTag).ToHaveAttributeAsync("title", "Scaling-Phase-2");
+            await AssertTruncated(longTag, "Scaling-Phase-2", expectTruncated: true);
+
+            // Ordinary labels never need it: same check, both slots, at desktop width —
+            var toolingDesktop = desktop.Locator(".epic-head", new() { HasTextString = "Tooling" });
+            await AssertTruncated(toolingDesktop.Locator(".vtag").First, "0.1.0", expectTruncated: false);
+            await AssertTruncated(toolingDesktop.Locator(".vtag").Last, "V1", expectTruncated: false);
+
+            // — and at the narrowest width this app is designed for, where the label is the same
+            // two-to-five characters but the font asked to draw it is larger.
+            var (phone, _) = await fx.NewPageAsync(320, 760);
+            await phone.GotoAsync(fx.BaseUrl);
+            var toolingPhone = phone.Locator(".epic-head", new() { HasTextString = "Tooling" });
+            await AssertTruncated(toolingPhone.Locator(".vtag").First, "0.1.0", expectTruncated: false);
+            await AssertTruncated(toolingPhone.Locator(".vtag").Last, "V1", expectTruncated: false);
+        }
+        finally
+        {
+            await http.DeleteAsync($"{fx.BaseUrl}/api/epic/{number}");
+        }
+    }
+
+    /// <summary>A vtag is truncated when its content overflows the fixed-width box it is clipped
+    /// to — scrollWidth (the content's own width) exceeds clientWidth (the box's). Checked instead
+    /// of trusting the box's pixel width against a hand-computed threshold, so this keeps meaning
+    /// the same thing if the slot's width or font-size ever changes again.</summary>
+    private static async Task AssertTruncated(ILocator tag, string label, bool expectTruncated)
+    {
+        var widths = await tag.EvaluateAsync<int[]>("e => [e.scrollWidth, e.clientWidth]");
+        var truncated = widths[0] > widths[1];
+        Assert.True(truncated == expectTruncated,
+            $"\"{label}\": expected truncated={expectTruncated} but scrollWidth={widths[0]}, "
+          + $"clientWidth={widths[1]}.");
+    }
+
+    [Fact]
     public async Task The_add_and_edit_epic_forms_set_the_version_and_the_release()
     {
         // Without this, an epic that conversion filed under the wrong release could only be moved
