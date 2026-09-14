@@ -15,14 +15,15 @@ namespace AIFTM.Api.Backlog;
 /// One number at the top rather than a flag on each epic: two epics cannot both claim to be current
 /// if there is only one place to say it.</param>
 /// <param name="Migrated">True when <see cref="YamlIndex.Parse"/> lifted a legacy story-level
-/// release onto its epic. Not part of the file — it tells BacklogService the text on disk is now
-/// one shape behind the board it just handed back.</param>
+/// release onto its epic. Not part of the file, nor of the board the browser gets — it tells
+/// BacklogService the text on disk is now one shape behind the board it just handed back.</param>
 public sealed record Board(
     string Project,
     IReadOnlyList<string> Roadmap,
     IReadOnlyList<Epic> Epics,
     int? CurrentEpic = null)
 {
+    [JsonIgnore]
     public bool Migrated { get; init; }
 
     /// <summary>Top-level keys the index does not model, carried through every write. Never sent to

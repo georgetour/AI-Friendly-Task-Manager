@@ -100,7 +100,7 @@ public class MarkupContractTests
     public void Both_epic_forms_offer_a_version_field_and_a_release_picker()
     {
         // Without this, an epic filed under the wrong release by conversion could only be moved by
-        // hand-editing the file — the whole reason this task exists.
+        // hand-editing the file.
         var html = Read("index.html");
 
         var addForm = Regex.Match(html, @"page === 'add-epic'.*?</form>", RegexOptions.Singleline).Value;

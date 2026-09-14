@@ -99,8 +99,9 @@ public static class YamlIndex
 
         var epics = (dto.Epics ?? new List<EpicDto>()).Where(e => e is not null).Select(e => new Epic(
             e.Number,
-            e.Version ?? "",
-            e.Release ?? "",
+            // Blank rather than " ", which would reach the page as an empty tag and an unnamed release group.
+            string.IsNullOrWhiteSpace(e.Version) ? "" : e.Version,
+            string.IsNullOrWhiteSpace(e.Release) ? "" : e.Release,
             e.Title ?? "",
             (e.Stories ?? new List<StoryDto>())
                 .Where(s => s is not null)

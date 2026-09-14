@@ -53,6 +53,25 @@ public class YamlIndexTests
     }
 
     [Fact]
+    public void A_whitespace_only_version_or_release_reads_as_blank()
+    {
+        // Otherwise " " reaches the page as an empty tag and a "By release" group with no name.
+        var board = YamlIndex.Parse("""
+            project: Acme App
+            roadmap: [V1]
+            epics:
+              - number: 0
+                version: ' '
+                release: "  "
+                title: Developer Tooling
+            """);
+
+        var epic = Assert.Single(board.Epics);
+        Assert.Equal("", epic.Version);
+        Assert.Equal("", epic.Release);
+    }
+
+    [Fact]
     public void Write_omits_version_and_release_when_an_epic_has_neither()
     {
         var board = new Board("Acme App", new[] { "1.0.0" },

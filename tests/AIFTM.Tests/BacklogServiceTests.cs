@@ -254,9 +254,6 @@ public class BacklogServiceTests : IDisposable
     [Fact]
     public void EditEpic_moves_an_epic_from_one_release_to_a_different_one()
     {
-        // Unset-to-value, value-to-blank and value-to-itself all pass without ever proving the one
-        // scenario this task exists for: an epic already on a release, filed under the wrong one,
-        // moved to a different concrete release.
         File.WriteAllText(Backlog, """
             project: Test
             roadmap: [V1, V2]

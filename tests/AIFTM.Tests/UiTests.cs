@@ -28,6 +28,30 @@ public class UiTests(UiFixture fx)
     }
 
     [Fact]
+    public async Task The_board_json_carries_nothing_that_exists_only_for_the_server()
+    {
+        // Whether the file was converted, what conversion moved, and the keys the index does not
+        // model are the server's business. Sent here they would also be baked into demo-data.js.
+        using var http = new HttpClient();
+        var json = await http.GetStringAsync($"{fx.BaseUrl}/api/board");
+
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var names = Descendants(doc.RootElement).ToList();
+        Assert.Contains("epics", names);
+        Assert.DoesNotContain("migrated", names);
+        Assert.DoesNotContain("releaseMoves", names);
+        Assert.DoesNotContain("extras", names);
+
+        static IEnumerable<string> Descendants(System.Text.Json.JsonElement e) => e.ValueKind switch
+        {
+            System.Text.Json.JsonValueKind.Object => e.EnumerateObject()
+                .SelectMany(p => Descendants(p.Value).Prepend(p.Name)),
+            System.Text.Json.JsonValueKind.Array => e.EnumerateArray().SelectMany(Descendants),
+            _ => [],
+        };
+    }
+
+    [Fact]
     public async Task The_add_menu_opens_from_the_plus_button_on_a_phone()
     {
         // This is the bug. #addMenu is a child of .addwrap, and hiding .addwrap on mobile removed
@@ -232,10 +256,9 @@ public class UiTests(UiFixture fx)
     [Fact]
     public async Task An_epic_can_move_from_one_release_to_a_different_one()
     {
-        // The scenario this task exists for: an epic already on a release — here, one outside the
-        // roadmap entirely, the harder of the two cases — corrected through the form to a different,
-        // roadmap-listed release, rather than by hand-editing the file. Unset-to-value, value-to-
-        // blank and value-to-itself (the other two tests either side of this one) do not cover this.
+        // An epic already on a release — here, one outside the roadmap entirely, the harder of the two
+        // cases — corrected through the form to a different, roadmap-listed release, rather than by
+        // hand-editing the file.
         const int number = 951;
         using var http = new HttpClient();
         var body = new StringContent(
@@ -270,8 +293,8 @@ public class UiTests(UiFixture fx)
         }
         finally
         {
-            // Same reason as the tests either side of this one: an epic left behind here would skew
-            // the alignment test's gap measurement for every test that runs after it.
+            // An epic left behind here would skew the epic-header gap measurement for every test that
+            // runs after it.
             await http.DeleteAsync($"{fx.BaseUrl}/api/epic/{number}");
         }
     }
