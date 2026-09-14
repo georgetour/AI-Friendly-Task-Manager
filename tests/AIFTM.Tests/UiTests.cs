@@ -143,12 +143,23 @@ public class UiTests(UiFixture fx)
         await Assertions.Expect(toolingHeader.Locator(".vtag").First).ToHaveTextAsync("0.1.0");
         await Assertions.Expect(toolingHeader.Locator(".vtag").Last).ToHaveTextAsync("V1");
 
-        var gaps = await page.Locator(".epic-head:visible").EvaluateAllAsync<double[]>(
-            "els => els.map(e => Math.round(e.querySelector('.cur-set').getBoundingClientRect().left" +
-            " - e.querySelector('.epic-open').getBoundingClientRect().right))");
+        // Paired with the title rather than measured alone: a bare list of numbers says nothing
+        // about which header disagreed with the others when this fails on a platform whose fonts
+        // or fallback stack render a label a few pixels wider or narrower than this machine's.
+        var rows = await page.Locator(".epic-head:visible").EvaluateAllAsync<string[][]>(
+            "els => els.map(e => [e.querySelector('.epic-name').textContent," +
+            " String(Math.round(e.querySelector('.cur-set').getBoundingClientRect().left" +
+            " - e.querySelector('.epic-open').getBoundingClientRect().right))])");
+        var headers = rows.Select(r => (Title: r[0],
+            Gap: double.Parse(r[1], System.Globalization.CultureInfo.InvariantCulture))).ToList();
 
-        Assert.True(gaps.Length >= 2, "Expected at least two visible epic headers.");
-        Assert.Single(gaps.Distinct());
+        Assert.True(headers.Count >= 2, "Expected at least two visible epic headers.");
+        var distinctGaps = headers.Select(h => h.Gap).Distinct().Count();
+        Assert.True(distinctGaps == 1,
+            "Epic headers should all reserve the same width for their version/release slots, so "
+          + "cur-set and epic-count line up at the same x regardless of what a header's badges say. "
+          + "Per-header gap (epic-open to cur-set):\n"
+          + string.Join("\n", headers.Select(h => $"  {h.Title}: {h.Gap}px")));
     }
 
     [Fact]
