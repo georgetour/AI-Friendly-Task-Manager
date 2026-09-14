@@ -1,5 +1,6 @@
 using AIFTM.Api.Backlog;
 using AIFTM.Api.Services;
+using YamlDotNet.RepresentationModel;
 
 namespace AIFTM.Tests;
 
@@ -330,6 +331,88 @@ public class BacklogServiceTests : IDisposable
         svc.GetBoard();
 
         Assert.Equal(afterFirst, File.ReadAllText(path));
+    }
+
+    private (BacklogService Svc, string Path) OwnerShaped(bool converted = false)
+    {
+        var dir = Directory.CreateDirectory(Path.Combine(_root, Guid.NewGuid().ToString("N"))).FullName;
+        var path = Path.Combine(dir, "BACKLOG.yaml");
+        File.WriteAllText(path, converted ? OwnerShapedBacklog.ConvertedYaml : OwnerShapedBacklog.Yaml);
+        return (new BacklogService(() => path, () => Path.Combine(dir, "skills")), path);
+    }
+
+    [Fact]
+    public void Opening_an_old_file_converts_it_without_losing_any_key_the_index_does_not_model()
+    {
+        var (svc, path) = OwnerShaped();
+        var before = OwnerShapedBacklog.StoryExtras(OwnerShapedBacklog.Yaml);
+
+        svc.GetBoard();
+        var written = File.ReadAllText(path);
+
+        Assert.NotEqual(OwnerShapedBacklog.Yaml, written);
+        Assert.DoesNotContain(OwnerShapedBacklog.Stories(written),
+            s => s.Children.ContainsKey(new YamlScalarNode("release")));
+        OwnerShapedBacklog.AssertStoryExtrasEqual(before, OwnerShapedBacklog.StoryExtras(written));
+        Assert.Equal(new[] { "0.1.0", "0.2.0", "0.3.0" },
+            OwnerShapedBacklog.Epics(written).Select(e => e.Children[new YamlScalarNode("version")].ToString()));
+    }
+
+    [Fact]
+    public void A_status_change_keeps_every_unmodelled_key()
+    {
+        var (svc, path) = OwnerShaped(converted: true);
+        var before = OwnerShapedBacklog.StoryExtras(File.ReadAllText(path));
+        Assert.NotEmpty(before["US-22"]);
+
+        svc.SetStoryStatus("US-22", "In Progress");
+
+        Assert.Equal("In Progress", svc.GetBoard().Epics[1].Stories[0].Status);
+        OwnerShapedBacklog.AssertStoryExtrasEqual(before, OwnerShapedBacklog.StoryExtras(File.ReadAllText(path)));
+    }
+
+    [Fact]
+    public void Editing_an_epic_keeps_the_unmodelled_keys_on_its_stories()
+    {
+        var (svc, path) = OwnerShaped(converted: true);
+        var before = OwnerShapedBacklog.StoryExtras(File.ReadAllText(path));
+        Assert.NotEmpty(before["US-22"]);
+
+        svc.EditEpic(2, "Delivery", "0.2.1", "V2");
+
+        OwnerShapedBacklog.AssertStoryExtrasEqual(before, OwnerShapedBacklog.StoryExtras(File.ReadAllText(path)));
+    }
+
+    [Fact]
+    public void Every_change_to_the_index_keeps_the_unmodelled_keys_it_does_not_remove()
+    {
+        var changes = new (string Name, Action<BacklogService> Apply, string[] Removed)[]
+        {
+            ("current epic", s => s.SetCurrentEpic(2), []),
+            ("add epic", s => s.AddEpic(9, "Later", "0.9.0", "V3"), []),
+            ("edit story", s => s.EditStory("US-18", "CD Backend Pipeline"), []),
+            ("add story", s => s.AddStory(1, "US-40", "Audit Log"), []),
+            ("tasks", s => s.SetTasks("US-01", [new TaskItem("One", true)]), []),
+            ("test cases", s => s.SetTestCases("US-01", [new TestCase("Check", "Passed")]), []),
+            ("delete story", s => s.DeleteStory("US-22"), ["US-22"]),
+            ("delete epic", s => s.DeleteEpic(3), ["US-30"]),
+        };
+
+        foreach (var (name, apply, removed) in changes)
+        {
+            var (svc, path) = OwnerShaped(converted: true);
+            var expected = OwnerShapedBacklog.StoryExtras(File.ReadAllText(path));
+            Assert.NotEmpty(expected.Values.SelectMany(v => v.Keys));
+            foreach (var code in removed) expected.Remove(code);
+
+            apply(svc);
+
+            var actual = OwnerShapedBacklog.StoryExtras(File.ReadAllText(path))
+                .Where(kv => kv.Value.Count > 0 || expected.ContainsKey(kv.Key))
+                .ToDictionary(kv => kv.Key, kv => kv.Value);
+            try { OwnerShapedBacklog.AssertStoryExtrasEqual(expected, actual); }
+            catch (Exception e) { throw new InvalidOperationException($"\"{name}\" lost an unmodelled key.", e); }
+        }
     }
 
     [Fact]

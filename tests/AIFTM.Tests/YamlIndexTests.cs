@@ -1,4 +1,5 @@
 using AIFTM.Api.Backlog;
+using YamlDotNet.RepresentationModel;
 
 namespace AIFTM.Tests;
 
@@ -395,6 +396,164 @@ public class YamlIndexTests
         Assert.False(twice.Migrated);
         Assert.Equal("V1", Assert.Single(twice.Epics).Release);
         Assert.DoesNotContain("release: V1.5", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Keys_the_index_does_not_model_survive_conversion_with_their_values()
+    {
+        var before = OwnerShapedBacklog.StoryExtras(OwnerShapedBacklog.Yaml);
+
+        var written = YamlIndex.Write(YamlIndex.Parse(OwnerShapedBacklog.Yaml));
+
+        Assert.NotEmpty(before.Values.SelectMany(v => v.Keys));
+        OwnerShapedBacklog.AssertStoryExtrasEqual(before, OwnerShapedBacklog.StoryExtras(written));
+        Assert.Equal(new[] { "0.1.0", "0.2.0", "0.3.0" },
+            OwnerShapedBacklog.Epics(written).Select(e => e.Children[new YamlScalarNode("version")].ToString()));
+    }
+
+    [Fact]
+    public void Unmodelled_keys_are_written_after_the_modelled_fields_in_the_order_the_file_had_them()
+    {
+        var written = YamlIndex.Write(YamlIndex.Parse(OwnerShapedBacklog.Yaml));
+
+        var epic = OwnerShapedBacklog.Epics(written).First();
+        Assert.Equal(new[] { "number", "version", "release", "title", "stories" }, OwnerShapedBacklog.Keys(epic));
+
+        var story = OwnerShapedBacklog.Stories(written).Single(s => s.Children[new YamlScalarNode("code")].ToString() == "US-22");
+        Assert.Equal(new[] { "code", "title", "status", "folder", "doc", "blocked_by" }, OwnerShapedBacklog.Keys(story));
+    }
+
+    [Fact]
+    public void Top_level_and_epic_level_unknown_keys_survive_a_write_in_place()
+    {
+        var yaml = """
+            owner: Finance team
+            project: Acme App
+            roadmap: [V1]
+            epics:
+            - number: 1
+              labels: [billing, urgent]
+              title: Core
+              links:
+                spec: docs/core.md
+                board: https://example.com/core
+              stories:
+              - code: US-01
+                title: Board
+                status: Done
+                folder: board
+            notes: |
+              Kept by hand.
+              Two lines.
+            """;
+
+        var board = YamlIndex.Parse(yaml);
+        var written = YamlIndex.Write(board with { Project = "Renamed" });
+
+        var root = OwnerShapedBacklog.Root(written);
+        Assert.Equal(new[] { "project", "roadmap", "epics", "owner", "notes" }, OwnerShapedBacklog.Keys(root));
+        Assert.Equal(OwnerShapedBacklog.Root(yaml).Children[new YamlScalarNode("notes")],
+                     root.Children[new YamlScalarNode("notes")]);
+
+        var before = OwnerShapedBacklog.Epics(yaml).Single();
+        var after = OwnerShapedBacklog.Epics(written).Single();
+        Assert.Equal(new[] { "number", "title", "labels", "links", "stories" }, OwnerShapedBacklog.Keys(after));
+        Assert.Equal(before.Children[new YamlScalarNode("labels")],
+                     after.Children[new YamlScalarNode("labels")]);
+        Assert.Equal(before.Children[new YamlScalarNode("links")],
+                     after.Children[new YamlScalarNode("links")]);
+    }
+
+    [Fact]
+    public void A_changed_story_keeps_its_unmodelled_keys()
+    {
+        var board = YamlIndex.Parse(OwnerShapedBacklog.Yaml);
+        var epic = board.Epics[1];
+        var changed = board with
+        {
+            Epics = board.Epics.Select(e => e == epic
+                ? e with { Title = "Delivery", Stories = e.Stories.Select(s => s with { Status = "Done" }).ToList() }
+                : e).ToList(),
+        };
+
+        var written = YamlIndex.Write(changed);
+
+        OwnerShapedBacklog.AssertStoryExtrasEqual(
+            OwnerShapedBacklog.StoryExtras(OwnerShapedBacklog.Yaml), OwnerShapedBacklog.StoryExtras(written));
+    }
+
+    [Fact]
+    public void A_converted_file_with_unmodelled_keys_is_written_back_byte_for_byte()
+    {
+        var text = OwnerShapedBacklog.ConvertedYaml;
+
+        var board = YamlIndex.Parse(text);
+
+        Assert.False(board.Migrated);
+        Assert.Equal(text.Replace("\r\n", "\n"), YamlIndex.Write(board).Replace("\r\n", "\n"));
+    }
+
+    [Fact]
+    public void Unmodelled_keys_stay_on_their_own_story_when_empty_list_items_sit_between()
+    {
+        var yaml = """
+            project: Demo
+            epics:
+            -
+            - number: 2
+              title: Two
+              stories:
+              - ~
+              - code: US-01
+                title: A
+                status: Done
+                folder: a
+              -
+              - code: US-02
+                title: B
+                status: Done
+                folder: b
+                doc: b.md
+            """;
+
+        var written = YamlIndex.Write(YamlIndex.Parse(yaml));
+
+        var extras = OwnerShapedBacklog.StoryExtras(written);
+        Assert.Empty(extras["US-01"]);
+        Assert.Equal("b.md", Assert.Single(extras["US-02"]).Value.ToString());
+    }
+
+    [Fact]
+    public void A_duplicate_key_inside_an_unmodelled_value_is_rejected_like_any_other()
+    {
+        // The value is kept now, so which of the two it would keep is a real question — and the
+        // answer everywhere else in this file is that neither wins silently.
+        var yaml = "project: Demo\nmeta: {owner: a, owner: b}\nepics: []\n";
+
+        Assert.Throws<YamlDotNet.Core.YamlException>(() => YamlIndex.Parse(yaml));
+    }
+
+    [Theory]
+    [InlineData("estimate: 5")]
+    [InlineData("estimate: '5'")]
+    [InlineData("blocked: ~")]
+    [InlineData("blocked:")]
+    [InlineData("tags: [a, b]")]
+    [InlineData("meta: {owner: me, due: 2026-10-01}")]
+    [InlineData("kind: !custom value")]
+    [InlineData("raw: !!binary aGVsbG8=")]
+    [InlineData("note: |\n      one\n      two")]
+    [InlineData("current_epic: 3")]
+    [InlineData("Title: Capitalised is a different key")]
+    public void An_unmodelled_value_of_any_yaml_type_parses_and_survives(string extra)
+    {
+        var yaml = "project: Acme\nepics:\n- number: 1\n  title: One\n  stories:\n  - code: US-01\n    title: A\n    status: Done\n    folder: a\n    "
+                 + extra + "\n";
+
+        var written = YamlIndex.Write(YamlIndex.Parse(yaml));
+
+        OwnerShapedBacklog.AssertStoryExtrasEqual(OwnerShapedBacklog.StoryExtras(yaml), OwnerShapedBacklog.StoryExtras(written));
+        Assert.NotEmpty(OwnerShapedBacklog.StoryExtras(written)["US-01"]);
     }
 
     [Theory]

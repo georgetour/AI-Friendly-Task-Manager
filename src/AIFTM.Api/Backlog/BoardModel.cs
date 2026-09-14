@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace AIFTM.Api.Backlog;
 
 /// <summary>
@@ -22,6 +24,11 @@ public sealed record Board(
     int? CurrentEpic = null)
 {
     public bool Migrated { get; init; }
+
+    /// <summary>Top-level keys the index does not model, carried through every write. Never sent to
+    /// the browser: the board has no use for them, and the file stays the only place they live.</summary>
+    [JsonIgnore]
+    public UnmodelledKeys Extras { get; init; } = UnmodelledKeys.None;
 }
 
 /// <param name="Version">The epic's own version, e.g. "0.3.0". A label, never a key — nothing looks
@@ -38,6 +45,10 @@ public sealed record Epic(
     IReadOnlyList<Story> Stories)
 {
     public string Slug { get; init; } = "";
+
+    /// <summary>Keys on this epic the index does not model. See <see cref="Board.Extras"/>.</summary>
+    [JsonIgnore]
+    public UnmodelledKeys Extras { get; init; } = UnmodelledKeys.None;
 }
 
 /// <param name="Status">A plain word: "In Progress", "Done". No emoji — those are presentation and
@@ -52,6 +63,11 @@ public sealed record Story(
     string Folder)
 {
     public string Slug { get; init; } = "";
+
+    /// <summary>Keys on this story the index does not model — <c>doc:</c>, <c>blocked_by:</c>, anything.
+    /// See <see cref="Board.Extras"/>.</summary>
+    [JsonIgnore]
+    public UnmodelledKeys Extras { get; init; } = UnmodelledKeys.None;
 }
 
 public sealed record TaskItem(string Text, bool Done);
