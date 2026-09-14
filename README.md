@@ -110,7 +110,7 @@ Every button maps to exactly one file. Nothing writes to two places at once.
 |---|---|
 | Add an epic | `BACKLOG.yaml` — a new epic, numbered for you |
 | Add a story | `BACKLOG.yaml` — a new story, plus a new `skills/<story>/` folder with a starter `SKILL.md` |
-| Rename an epic | `BACKLOG.yaml` — the title only; its stories are untouched |
+| Edit an epic | `BACKLOG.yaml` — the title, version and release; its stories are untouched |
 | Set the current epic | `BACKLOG.yaml` — one line, `currentEpic:` |
 | Change a story's status | `BACKLOG.yaml` — one line. Marking it **Done** with tasks unticked or test cases unpassed asks first |
 | Add / edit / delete / tick / reorder a task | `skills/<story>/tasks.yaml` |
@@ -163,12 +163,13 @@ currentEpic: 0          # optional — the epic you're working in, by number
 
 epics:
   - number: 0
+    version: 0.1.0      # optional — the epic's own version
+    release: V1         # optional — which roadmap release the epic belongs to
     title: Your Epic Title
     stories:
       - code: US-01
         title: Your Story Title
         status: In Progress
-        release: V1
         folder: your-story-title
 ```
 

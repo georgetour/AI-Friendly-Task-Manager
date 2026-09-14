@@ -175,6 +175,25 @@ public class TemplateFileTests
     }
 
     [Fact]
+    public void The_README_documents_BACKLOG_yaml_in_the_shape_the_app_writes()
+    {
+        // Coding agents edit the backlog straight from this example. An example in the old shape
+        // teaches them to write a file the app has to convert on its next read.
+        var readme = File.ReadAllText(Path.Combine(Path.GetDirectoryName(TemplatesDir())!, "README.md"))
+            .Replace("\r\n", "\n");
+        var example = System.Text.RegularExpressions.Regex.Match(readme,
+            @"\*\*`BACKLOG\.yaml`\*\*\s*```yaml\n(.*?)```", System.Text.RegularExpressions.RegexOptions.Singleline);
+        Assert.True(example.Success, "README.md has no BACKLOG.yaml example.");
+
+        var board = YamlIndex.Parse(example.Groups[1].Value);
+
+        Assert.False(board.Migrated);
+        var epic = Assert.Single(board.Epics);
+        Assert.Contains(epic.Release, board.Roadmap);
+        Assert.NotEmpty(epic.Stories);
+    }
+
+    [Fact]
     public void The_template_is_already_in_the_new_shape_so_nothing_converts_it()
     {
         var text = File.ReadAllText(TemplateLocator.Find("BACKLOG.template.yaml"));
