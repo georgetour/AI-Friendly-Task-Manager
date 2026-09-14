@@ -386,6 +386,44 @@ public class YamlIndexTests
     }
 
     [Fact]
+    public void Conversion_reports_the_unscheduled_stories_it_moved_into_their_epics_release()
+    {
+        // Eight stories already on V3 and six left blank: the epic adopts V3, and the six are the
+        // stories whose plan just changed without anyone saying so.
+        var named = Enumerable.Range(1, 8).Select(i => ($"US-{100 + i}", "V3"));
+        var blank = Enumerable.Range(1, 6).Select(i => ($"US-{200 + i}", "''"));
+        var stories = string.Concat(named.Concat(blank).Select(s =>
+            $"  - code: {s.Item1}\n    title: Story {s.Item1}\n    status: Not Yet Started\n    release: {s.Item2}\n    folder: f-{s.Item1}\n"));
+        var yaml = "project: Billing\nroadmap: [V1, V2, V3]\nepics:\n- number: 11\n  title: Scaling & Performance\n  version: 0.11.0\n  stories:\n"
+                 + stories;
+
+        var board = YamlIndex.Parse(yaml);
+
+        Assert.Equal("V3", Assert.Single(board.Epics).Release);
+        Assert.Equal(blank.Select(s => s.Item1), board.ReleaseMoves.Select(m => m.Code));
+        Assert.All(board.ReleaseMoves, m => Assert.Equal(("", "V3", 11), (m.From, m.To, m.EpicNumber)));
+        Assert.Equal("Moved US-201 from unscheduled into release V3 with epic 11 (Scaling & Performance).",
+            board.ReleaseMoves[0].ToString());
+    }
+
+    [Fact]
+    public void Conversion_reports_a_story_whose_named_release_differs_from_its_epics()
+    {
+        var board = YamlIndex.Parse(LegacyYaml);
+
+        Assert.Equal(new[] { "US-11", "US-12" }, board.ReleaseMoves.Select(m => m.Code));
+        Assert.Equal("Moved US-12 from release V4 into release V1 with epic 1 (Core Application).",
+            board.ReleaseMoves[1].ToString());
+    }
+
+    [Fact]
+    public void A_file_already_in_the_new_shape_reports_no_moves()
+    {
+        Assert.Empty(YamlIndex.Parse(Yaml).ReleaseMoves);
+        Assert.Empty(YamlIndex.Parse(YamlIndex.Write(YamlIndex.Parse(LegacyYaml))).ReleaseMoves);
+    }
+
+    [Fact]
     public void Parse_is_idempotent_across_a_write()
     {
         var once = YamlIndex.Parse(LegacyYaml);

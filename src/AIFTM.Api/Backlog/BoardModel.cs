@@ -29,6 +29,21 @@ public sealed record Board(
     /// the browser: the board has no use for them, and the file stays the only place they live.</summary>
     [JsonIgnore]
     public UnmodelledKeys Extras { get; init; } = UnmodelledKeys.None;
+
+    /// <summary>The stories whose plan <see cref="YamlIndex.Parse"/> changed when it lifted releases onto
+    /// epics. Not part of the file and not kept anywhere: it exists so the one write that converts a
+    /// file can say what it regrouped.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<ReleaseMove> ReleaseMoves { get; init; } = [];
+}
+
+/// <summary>A story that now sits in a release it did not name, because its epic adopted that release.</summary>
+/// <param name="From">The release the story named; empty when it named none.</param>
+public sealed record ReleaseMove(string Code, string From, string To, int EpicNumber, string EpicTitle)
+{
+    public override string ToString() =>
+        $"Moved {Code} from {(From.Length == 0 ? "unscheduled" : "release " + From)} into release {To} "
+      + $"with epic {EpicNumber} ({EpicTitle}).";
 }
 
 /// <param name="Version">The epic's own version, e.g. "0.3.0". A label, never a key — nothing looks

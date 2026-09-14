@@ -47,9 +47,16 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
             // locked — must still open. Before conversion existed a read never wrote, so failing here
             // would turn a board that opened yesterday into a 422 today. The lifted board is correct in
             // memory; the conversion is simply tried again on the next read or the next click.
-            try { return Save(path, board); }
+            Board saved;
+            try { saved = Save(path, board); }
             catch (IOException) { return board; }
             catch (UnauthorizedAccessException) { return board; }
+
+            // Said once, by the write that did it, and kept nowhere: once the file is converted there is
+            // no longer any record of which release a story named, so this is the only moment it can
+            // be said. A story whose own release differs from its epic's is a plan that just changed.
+            foreach (var move in board.ReleaseMoves) Console.WriteLine(move);
+            return saved;
         }
     }
 

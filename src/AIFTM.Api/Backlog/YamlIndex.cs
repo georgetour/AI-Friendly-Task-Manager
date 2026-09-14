@@ -37,8 +37,8 @@ public static class YamlIndex
     {
         public int Number { get; set; }
 
-        // Nullable and left null when empty, so the serializer's OmitNull keeps a backlog that uses
-        // neither field byte-identical to what this wrote before they existed.
+        // Nullable because a file may leave either out. Write leaves a blank one out as well, which keeps
+        // a backlog that uses neither field byte-identical to what this wrote before they existed.
         public string? Version { get; set; }
         public string? Release { get; set; }
 
@@ -55,7 +55,7 @@ public static class YamlIndex
         public string Status { get; set; } = "Not Yet Started";
 
         // Legacy input only. A file written before the release moved up to the epic still carries this,
-        // and LiftReleasesToEpics reads it; Write never sets it, so OmitNull drops it from the output.
+        // and LiftReleasesToEpics reads it; Write has no place for it on a story, so it never goes back out.
         public string? Release { get; set; }
 
         public string Folder { get; set; } = "";
@@ -95,7 +95,7 @@ public static class YamlIndex
                   ?? new IndexDto();
 
         AttachUnmodelledKeys(dto, yaml);
-        var migrated = LiftReleasesToEpics(dto);
+        var (migrated, moves) = LiftReleasesToEpics(dto);
 
         var epics = (dto.Epics ?? new List<EpicDto>()).Where(e => e is not null).Select(e => new Epic(
             e.Number,
@@ -117,6 +117,7 @@ public static class YamlIndex
         return new Board(dto.Project ?? "", dto.Roadmap ?? new List<string>(), AssignSlugs(epics), current)
         {
             Migrated = migrated,
+            ReleaseMoves = moves,
             Extras = dto.Extras,
         };
     }
@@ -179,18 +180,20 @@ public static class YamlIndex
     /// unable to bind the port. A file this cannot make sense of yields epics with no release, which is
     /// a legitimate state that renders as Unscheduled.
     /// </summary>
-    /// <returns>True when anything was lifted, so the caller knows the text on disk is a shape behind.</returns>
-    private static bool LiftReleasesToEpics(IndexDto dto)
+    /// <returns>Whether anything was lifted, so the caller knows the text on disk is a shape behind; and
+    /// every story that now sits in a release it did not name, including one that named none.</returns>
+    private static (bool Lifted, List<ReleaseMove> Moves) LiftReleasesToEpics(IndexDto dto)
     {
         // A bare "-" list item deserializes to a null element — valid YAML, and one that carries no
         // code, title, status or folder, so skipping it loses nothing.
         var epics = (dto.Epics ?? new List<EpicDto>()).Where(e => e is not null).ToList();
         var roadmap = dto.Roadmap ?? new List<string>();
+        var moves = new List<ReleaseMove>();
 
         var carriesLegacy = epics.Any(e =>
             (e.Stories ?? new List<StoryDto>()).Where(s => s is not null).Any(s => !string.IsNullOrWhiteSpace(s.Release)));
 
-        if (!carriesLegacy) return false;
+        if (!carriesLegacy) return (false, moves);
 
         foreach (var epic in epics)
         {
@@ -202,12 +205,18 @@ public static class YamlIndex
                 if (adopted.Length > 0) epic.Release = adopted;
             }
 
-            // Cleared whether or not this epic adopted one: the field does not exist on a story any
-            // more, and leaving it would write it straight back out on the next save.
-            foreach (var story in stories) story.Release = null;
+            // An epic left unscheduled moved nobody: every story in it named no release to begin with.
+            if (string.IsNullOrWhiteSpace(epic.Release)) continue;
+
+            foreach (var story in stories)
+            {
+                var named = (story.Release ?? "").Trim();
+                if (named != epic.Release)
+                    moves.Add(new ReleaseMove(story.Code ?? "", named, epic.Release, epic.Number, epic.Title ?? ""));
+            }
         }
 
-        return true;
+        return (true, moves);
     }
 
     /// <summary>
