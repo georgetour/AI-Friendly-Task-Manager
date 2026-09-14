@@ -53,6 +53,40 @@ public class BacklogServiceTests : IDisposable
     }
 
     [Fact]
+    public void A_change_is_written_to_the_file_it_was_read_from_even_if_the_project_switches_mid_way()
+    {
+        // Switching project changes what the resolver answers, under another service's lock. Asking
+        // it again to save would write this project's board over the other project's file.
+        var other = Path.Combine(_root, "other.yaml");
+        const string otherText = "project: Other\nepics: []\n";
+        File.WriteAllText(other, otherText);
+
+        var calls = 0;
+        var svc = new BacklogService(() => calls++ == 0 ? Backlog : other, () => Skills);
+
+        svc.SetStoryStatus("US-01", "Done");
+
+        Assert.Equal(otherText, File.ReadAllText(other));
+        Assert.Equal("Done", YamlIndex.Parse(File.ReadAllText(Backlog)).Epics[0].Stories[0].Status);
+    }
+
+    [Fact]
+    public void Opening_an_old_file_converts_the_file_it_read_even_if_the_project_switches_mid_way()
+    {
+        var other = Path.Combine(_root, "other.yaml");
+        const string otherText = "project: Other\nepics: []\n";
+        File.WriteAllText(other, otherText);
+
+        var calls = 0;
+        var svc = new BacklogService(() => calls++ == 0 ? Backlog : other, () => Skills);
+
+        svc.GetBoard();
+
+        Assert.Equal(otherText, File.ReadAllText(other));
+        Assert.False(YamlIndex.Parse(File.ReadAllText(Backlog)).Migrated);
+    }
+
+    [Fact]
     public void GetBoard_returns_the_index()
     {
         var board = _svc.GetBoard();

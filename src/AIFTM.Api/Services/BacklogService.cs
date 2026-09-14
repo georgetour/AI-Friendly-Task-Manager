@@ -4,7 +4,7 @@ using AIFTM.Api.Backlog;
 namespace AIFTM.Api.Services;
 
 /// <summary>
-/// Read/write gateway over the backlog. Both paths resolve fresh on every call, so pointing the
+/// Read/write gateway over the backlog. Both paths resolve fresh for every operation, so pointing the
 /// tracker somewhere else through Configure takes effect with no restart. Writes are serialized
 /// behind a lock and are whole-file: deserialize, mutate, serialize. There is no surgical text
 /// editing because the app is the only writer.
@@ -38,7 +38,8 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
     {
         lock (_lock)
         {
-            var text = File.ReadAllText(resolveBacklog());
+            var path = resolveBacklog();
+            var text = File.ReadAllText(path);
             var board = YamlIndex.Parse(text);
             if (!board.Migrated || YamlIndex.HasComments(text)) return board;
 
@@ -46,7 +47,7 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
             // locked — must still open. Before conversion existed a read never wrote, so failing here
             // would turn a board that opened yesterday into a 422 today. The lifted board is correct in
             // memory; the conversion is simply tried again on the next read or the next click.
-            try { return Save(board); }
+            try { return Save(path, board); }
             catch (IOException) { return board; }
             catch (UnauthorizedAccessException) { return board; }
         }
@@ -56,7 +57,7 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
     {
         lock (_lock)
         {
-            var (_, story) = Locate(Read(), code);
+            var (_, story) = Locate(Read(resolveBacklog()), code);
             return StoryFolder.Read(resolveSkills(), story.Folder);
         }
     }
@@ -72,9 +73,10 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
 
         lock (_lock)
         {
-            var board = Read();
+            var path = resolveBacklog();
+            var board = Read(path);
             var (epic, story) = Locate(board, code);
-            return Save(Replace(board, epic, story with { Status = status }));
+            return Save(path, Replace(board, epic, story with { Status = status }));
         }
     }
 
@@ -84,11 +86,12 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
     {
         lock (_lock)
         {
-            var board = Read();
+            var path = resolveBacklog();
+            var board = Read(path);
             if (!board.Epics.Any(e => e.Number == number))
                 throw new BacklogValidationException($"There is no epic {number}.");
 
-            return Save(board with { CurrentEpic = number });
+            return Save(path, board with { CurrentEpic = number });
         }
     }
 
@@ -107,7 +110,7 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
 
         lock (_lock)
         {
-            var (_, story) = Locate(Read(), code);
+            var (_, story) = Locate(Read(resolveBacklog()), code);
             StoryFolder.WriteTasks(resolveSkills(), story.Folder, clean);
         }
     }
@@ -129,7 +132,7 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
 
         lock (_lock)
         {
-            var (_, story) = Locate(Read(), code);
+            var (_, story) = Locate(Read(resolveBacklog()), code);
             StoryFolder.WriteTestCases(resolveSkills(), story.Folder, clean);
         }
     }
@@ -144,12 +147,13 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
 
         lock (_lock)
         {
-            var board = Read();
+            var path = resolveBacklog();
+            var board = Read(path);
             if (board.Epics.Any(e => e.Number == number))
                 throw new BacklogValidationException($"Epic {number} already exists. Pick another number.");
 
             var epics = board.Epics.Append(new Epic(number, version, release, title, new List<Story>())).ToList();
-            return Save(board with { Epics = epics });
+            return Save(path, board with { Epics = epics });
         }
     }
 
@@ -163,11 +167,12 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
 
         lock (_lock)
         {
-            var board = Read();
+            var path = resolveBacklog();
+            var board = Read(path);
             if (board.Epics.All(e => e.Number != number))
                 throw new BacklogValidationException($"There is no epic {number}.");
 
-            return Save(board with
+            return Save(path, board with
             {
                 Epics = board.Epics.Select(e => e.Number == number
                     ? e with { Title = title, Version = version, Release = release }
@@ -180,11 +185,12 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
     {
         lock (_lock)
         {
-            var board = Read();
+            var path = resolveBacklog();
+            var board = Read(path);
             var epic = board.Epics.FirstOrDefault(e => e.Number == number)
                 ?? throw new BacklogValidationException($"There is no epic {number}.");
 
-            var saved = Save(board with { Epics = board.Epics.Where(e => e.Number != number).ToList() });
+            var saved = Save(path, board with { Epics = board.Epics.Where(e => e.Number != number).ToList() });
 
             foreach (var story in epic.Stories) TryDeleteFolder(story.Folder);
             return saved;
@@ -198,7 +204,8 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
 
         lock (_lock)
         {
-            var board = Read();
+            var path = resolveBacklog();
+            var board = Read(path);
             var epic = board.Epics.FirstOrDefault(e => e.Number == epicNumber)
                 ?? throw new BacklogValidationException($"There is no epic {epicNumber} to add this story to.");
 
@@ -209,7 +216,7 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
             StoryFolder.Create(resolveSkills(), folder, code, title, description);
 
             var story = new Story(code, title, "Not Yet Started", folder);
-            return Save(Replace(board, epic with { Stories = epic.Stories.Append(story).ToList() }));
+            return Save(path, Replace(board, epic with { Stories = epic.Stories.Append(story).ToList() }));
         }
     }
 
@@ -222,9 +229,10 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
 
         lock (_lock)
         {
-            var board = Read();
+            var path = resolveBacklog();
+            var board = Read(path);
             var (epic, story) = Locate(board, code);
-            return Save(Replace(board, epic, story with { Title = title }));
+            return Save(path, Replace(board, epic, story with { Title = title }));
         }
     }
 
@@ -232,10 +240,11 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
     {
         lock (_lock)
         {
-            var board = Read();
+            var path = resolveBacklog();
+            var board = Read(path);
             var (epic, story) = Locate(board, code);
 
-            var saved = Save(Replace(board,
+            var saved = Save(path, Replace(board,
                 epic with { Stories = epic.Stories.Where(s => s.Code != code).ToList() }));
 
             TryDeleteFolder(story.Folder);
@@ -245,12 +254,15 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
 
     // ------------------------------------------------------------------ helpers --
 
-    private Board Read() => YamlIndex.Parse(File.ReadAllText(resolveBacklog()));
+    // Both take the path rather than asking the resolver, so an operation reads and saves the same file.
+    // Switching project changes the resolver's answer under AppConfigService's lock, not this one; a
+    // second ask landing after a switch would write one project's board over another project's file.
+    private static Board Read(string path) => YamlIndex.Parse(File.ReadAllText(path));
 
-    private Board Save(Board board)
+    private static Board Save(string path, Board board)
     {
         var yaml = YamlIndex.Write(board);
-        File.WriteAllText(resolveBacklog(), yaml, Utf8NoBom);
+        File.WriteAllText(path, yaml, Utf8NoBom);
         return YamlIndex.Parse(yaml);   // re-parse so slugs are assigned from the saved titles
     }
 
