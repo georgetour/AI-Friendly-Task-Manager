@@ -64,6 +64,15 @@ public static class BacklogValidation
         var file = Path.GetFileName(backlogPath);
         var lines = backlogText.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
 
+        // Only while the conversion is pending: a commented file already in the new shape has nothing
+        // waiting to be written, so there is nothing to warn about.
+        if (board.Migrated && YamlIndex.HasComments(backlogText))
+            issues.Add(new ValidationIssue("warning",
+                "The board shows this backlog converted — each epic now holds its release — but "
+              + $"{file} has not been rewritten, because it contains comments and a rewrite cannot keep "
+              + "them. The next change you make will write the new shape without the comments.",
+                file));
+
         foreach (var epic in board.Epics)
         {
             // Invariant, not the current culture: this string is matched against the text of a file,

@@ -211,6 +211,19 @@ public static class YamlIndex
     }
 
     /// <summary>
+    /// Whether the text holds a YAML comment — asked of the scanner, because a "#" inside a quoted
+    /// value is text, not a comment. Comments are the one thing a whole-file write cannot carry.
+    /// Call it on text <see cref="Parse"/> has already accepted; the scanner throws on broken YAML.
+    /// </summary>
+    public static bool HasComments(string yaml)
+    {
+        var scanner = new YamlDotNet.Core.Scanner(new StringReader(yaml), skipComments: false);
+        while (scanner.MoveNext())
+            if (scanner.Current is YamlDotNet.Core.Tokens.Comment) return true;
+        return false;
+    }
+
+    /// <summary>
     /// The release an epic belongs to, given the releases its stories name: the earliest in roadmap
     /// order, with any the roadmap does not list sorting last. Empty when none are named. The one place
     /// this rule lives — the YAML lift and the markdown migrator both call it, so they cannot disagree.

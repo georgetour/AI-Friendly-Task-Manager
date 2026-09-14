@@ -349,6 +349,67 @@ public class BacklogValidationTests : IDisposable
         Assert.DoesNotContain("tasks.yaml", issue.Where);
     }
 
+    private const string CommentedOld = """
+        # Planning notes live in this file too.
+        project: Test
+        roadmap: [V1]
+        epics:
+          - number: 0
+            title: Tooling
+            stories:
+              - code: US-01
+                title: Board
+                status: Done
+                release: V1   # agreed in the kickoff
+                folder: board
+        """;
+
+    [Fact]
+    public void An_old_file_with_comments_warns_that_the_next_change_will_drop_them()
+    {
+        Directory.CreateDirectory(Path.Combine(Skills, "board"));
+
+        var report = CheckYaml(CommentedOld);
+
+        Assert.True(report.Ok);
+        var warning = Assert.Single(report.Issues, i => i.Message.Contains("comment", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("warning", warning.Severity);
+        Assert.Contains("BACKLOG.yaml", warning.Where);
+    }
+
+    [Fact]
+    public void A_commented_file_already_in_the_new_shape_has_nothing_to_warn_about()
+    {
+        Directory.CreateDirectory(Path.Combine(Skills, "board"));
+
+        var report = CheckYaml("""
+            # Planning notes live in this file too.
+            project: Test
+            roadmap: [V1]
+            epics:
+              - number: 0
+                release: V1   # agreed in the kickoff
+                title: Tooling
+                stories:
+                  - code: US-01
+                    title: Board
+                    status: Done
+                    folder: board
+            """);
+
+        Assert.DoesNotContain(report.Issues, i => i.Message.Contains("comment", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void A_hash_inside_a_quoted_value_is_not_a_comment()
+    {
+        Directory.CreateDirectory(Path.Combine(Skills, "board"));
+
+        var report = CheckYaml(Good.Replace("title: Board", "title: 'Board #1'"));
+
+        Assert.DoesNotContain(report.Issues, i => i.Message.Contains("comment", StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public void A_folder_escaping_the_skills_root_is_an_error()
     {

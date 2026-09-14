@@ -29,13 +29,18 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
     ///
     /// The write is the same whole-file save every click already performs, and it happens once — the
     /// converted file parses with nothing left to lift.
+    ///
+    /// Except when the file has comments. A write cannot keep them, and before conversion existed a read
+    /// never wrote, so a read never deleted one. The board is shown converted all the same, Sync says
+    /// why the file is still in the old shape, and the next click writes it as every click always has.
     /// </summary>
     public Board GetBoard()
     {
         lock (_lock)
         {
-            var board = Read();
-            if (!board.Migrated) return board;
+            var text = File.ReadAllText(resolveBacklog());
+            var board = YamlIndex.Parse(text);
+            if (!board.Migrated || YamlIndex.HasComments(text)) return board;
 
             // A backlog this process cannot write — a read-only checkout, a file another program has
             // locked — must still open. Before conversion existed a read never wrote, so failing here

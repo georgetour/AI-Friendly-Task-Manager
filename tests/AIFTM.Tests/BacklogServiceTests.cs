@@ -415,6 +415,67 @@ public class BacklogServiceTests : IDisposable
         }
     }
 
+    private const string CommentedOld = """
+        # Planning notes live in this file too.
+        project: Acme App
+        roadmap: [V1, V2]
+        epics:
+        - number: 1
+          title: Core Application
+          stories:
+          - code: US-03
+            title: Local Setup
+            status: Done
+            release: V2   # moved after the kickoff
+            folder: local-setup
+        """;
+
+    [Fact]
+    public void Opening_an_old_file_with_comments_leaves_the_file_alone()
+    {
+        // A write cannot keep a comment, and before conversion existed a read never wrote — so a read
+        // must not be what deletes one.
+        var path = Path.Combine(_root, "commented.yaml");
+        File.WriteAllText(path, CommentedOld);
+        var svc = new BacklogService(() => path, () => Skills);
+
+        var board = svc.GetBoard();
+
+        Assert.Equal("V2", Assert.Single(board.Epics).Release);
+        Assert.Equal(CommentedOld, File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void A_change_to_an_old_file_with_comments_still_writes_the_new_shape()
+    {
+        var path = Path.Combine(_root, "commented.yaml");
+        File.WriteAllText(path, CommentedOld);
+        var svc = new BacklogService(() => path, () => Skills);
+
+        svc.SetStoryStatus("US-03", "In Progress");
+
+        var written = File.ReadAllText(path);
+        Assert.DoesNotContain(OwnerShapedBacklog.Stories(written), s => s.Children.ContainsKey(new YamlScalarNode("release")));
+        Assert.Equal("V2", Assert.Single(YamlIndex.Parse(written).Epics).Release);
+    }
+
+    [Fact]
+    public void A_hash_inside_a_quoted_value_does_not_stop_an_old_file_converting()
+    {
+        var path = Path.Combine(_root, "hash.yaml");
+        var text = CommentedOld
+            .Replace("# Planning notes live in this file too.\n", "", StringComparison.Ordinal)
+            .Replace("   # moved after the kickoff", "", StringComparison.Ordinal)
+            .Replace("title: Local Setup", "title: 'Local Setup #2'", StringComparison.Ordinal);
+        Assert.DoesNotContain("kickoff", text, StringComparison.Ordinal);
+        File.WriteAllText(path, text);
+
+        new BacklogService(() => path, () => Skills).GetBoard();
+
+        Assert.NotEqual(text, File.ReadAllText(path));
+        Assert.Contains("'Local Setup #2'", File.ReadAllText(path), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void GetBoard_still_opens_an_old_file_it_cannot_write()
     {
