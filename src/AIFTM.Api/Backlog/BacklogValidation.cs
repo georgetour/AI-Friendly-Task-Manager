@@ -64,6 +64,15 @@ public static class BacklogValidation
         var file = Path.GetFileName(backlogPath);
         var lines = backlogText.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
 
+        // Only while the conversion is pending: a commented file already in the new shape has nothing
+        // waiting to be written, so there is nothing to warn about.
+        if (board.Migrated && YamlIndex.HasComments(backlogText))
+            issues.Add(new ValidationIssue("warning",
+                "The board shows this backlog converted — each epic now holds its release — but "
+              + $"{file} has not been rewritten, because it contains comments and a rewrite cannot keep "
+              + "them. The next change you make will write the new shape without the comments.",
+                file));
+
         foreach (var epic in board.Epics)
         {
             // Invariant, not the current culture: this string is matched against the text of a file,
@@ -72,6 +81,17 @@ public static class BacklogValidation
 
             if (!seenEpics.Add(epic.Number))
                 issues.Add(new ValidationIssue("error", $"Epic {epic.Number} appears more than once.",
+                    At(file, lines, "number", epicNumber)));
+
+            // An epic with no release is not an issue: unscheduled is a real state, and warning on it would
+            // fire on every backlog that has any unplanned work.
+            //
+            // Located by the epic's number line, not by searching for "release: X": At returns the first line
+            // that matches, so two epics sharing an unlisted release would both point at the first of them, and
+            // in a file not yet converted the first match can be a story's release line.
+            if (!string.IsNullOrWhiteSpace(epic.Release) && !board.Roadmap.Contains(epic.Release))
+                issues.Add(new ValidationIssue("warning",
+                    $"Epic {epic.Number} is set to release {epic.Release}, which is not in the roadmap.",
                     At(file, lines, "number", epicNumber)));
 
             foreach (var story in epic.Stories)
@@ -88,10 +108,6 @@ public static class BacklogValidation
                 if (!Statuses.Contains(story.Status))
                     issues.Add(new ValidationIssue("error",
                         $"\"{story.Status}\" is not a status. Use one of: {string.Join(", ", Statuses)}.", where));
-
-                if (!string.IsNullOrWhiteSpace(story.Release) && !board.Roadmap.Contains(story.Release))
-                    issues.Add(new ValidationIssue("warning",
-                        $"{story.Code} is set to release {story.Release}, which is not in the roadmap.", where));
 
                 if (string.IsNullOrWhiteSpace(story.Folder))
                 {

@@ -128,4 +128,19 @@ public class MigrationTests : IDisposable
         // The sample references skill files; migration should tell you rather than guess.
         Assert.All(result.Notes, n => Assert.Contains("SKILL.md", n));
     }
+
+    [Fact]
+    public void An_epic_straddling_two_releases_lands_on_the_earlier_one_with_no_release_left_on_a_story()
+    {
+        Migrate();
+
+        // Epic 1 in the bundled sample has stories in V1 and V1.5; the epic should carry V1.
+        var text = File.ReadAllText(OutYaml);
+        var board = YamlIndex.Parse(text);
+
+        var epic = board.Epics.Single(e => e.Number == 1);
+        Assert.Equal("V1", epic.Release);
+        Assert.False(board.Migrated);
+        Assert.DoesNotContain("release: V1.5", text, StringComparison.Ordinal);
+    }
 }

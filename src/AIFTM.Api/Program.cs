@@ -355,19 +355,19 @@ app.MapDelete("/api/config/logo", (AppConfigService cfg) => Results.Json(cfg.Set
 // the person using the app, so the form can show it verbatim.
 app.MapPost("/api/epic", (AddEpicRequest r, BacklogService svc) =>
 {
-    try { return Results.Json(svc.AddEpic(r.Number, r.Title)); }
+    try { return Results.Json(svc.AddEpic(r.Number, r.Title, r.Version, r.Release)); }
     catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
 });
 
 app.MapPost("/api/story", (AddStoryRequest r, BacklogService svc) =>
 {
-    try { return Results.Json(svc.AddStory(r.EpicNumber, r.Code, r.Title, r.Release, r.Description)); }
+    try { return Results.Json(svc.AddStory(r.EpicNumber, r.Code, r.Title, r.Description)); }
     catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
 });
 
-app.MapPost("/api/epic/{number:int}", (int number, RenameRequest r, BacklogService svc) =>
+app.MapPost("/api/epic/{number:int}", (int number, EditEpicRequest r, BacklogService svc) =>
 {
-    try { return Results.Json(svc.RenameEpic(number, r.Title)); }
+    try { return Results.Json(svc.EditEpic(number, r.Title, r.Version, r.Release)); }
     catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
 });
 
@@ -379,7 +379,7 @@ app.MapDelete("/api/epic/{number:int}", (int number, BacklogService svc) =>
 
 app.MapPost("/api/story/{code}", (string code, EditStoryRequest r, BacklogService svc) =>
 {
-    try { return Results.Json(svc.EditStory(code, r.Title, r.Release)); }
+    try { return Results.Json(svc.EditStory(code, r.Title)); }
     catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
 });
 
@@ -425,8 +425,8 @@ app.MapGet("/edit-story", () => Shell());
 app.MapGet("/releases/{tag}", (string tag, BacklogService svc) =>
 {
     var board = svc.GetBoard();
-    var used = board.Epics.SelectMany(e => e.Stories)
-        .Select(s => string.IsNullOrWhiteSpace(s.Release) ? "Unscheduled" : s.Release);
+    var used = board.Epics
+        .Select(e => string.IsNullOrWhiteSpace(e.Release) ? "Unscheduled" : e.Release);
     return ShellOr404(used.Contains(tag) || board.Roadmap.Contains(tag));
 });
 
@@ -455,8 +455,8 @@ sealed record PathRequest(string Path);
 sealed record AddProjectRequest(string BacklogPath, string? SkillsPath);
 sealed record NameRequest(string Name);
 sealed record RemoveProjectRequest(string Path, string ConfirmName);
-sealed record AddEpicRequest(int Number, string Title);
-sealed record AddStoryRequest(int EpicNumber, string Code, string Title, string? Release, string? Description);
+sealed record AddEpicRequest(int Number, string Title, string? Version, string? Release);
+sealed record AddStoryRequest(int EpicNumber, string Code, string Title, string? Description);
 sealed record SaveSkillRequest(string Path, string Content);
-sealed record RenameRequest(string Title);
-sealed record EditStoryRequest(string Title, string? Release);
+sealed record EditEpicRequest(string Title, string? Version, string? Release);
+sealed record EditStoryRequest(string Title);

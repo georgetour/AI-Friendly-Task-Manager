@@ -18,6 +18,12 @@ public class BacklogValidationTests : IDisposable
 
     private void WriteIndex(string yaml) => File.WriteAllText(Backlog, yaml);
 
+    private ValidationReport CheckYaml(string yaml)
+    {
+        WriteIndex(yaml);
+        return BacklogValidation.Check(Backlog, Skills);
+    }
+
     private const string Good = """
         project: Test
         roadmap: [V1]
@@ -231,15 +237,58 @@ public class BacklogValidationTests : IDisposable
     }
 
     [Fact]
-    public void A_release_not_in_the_roadmap_is_a_warning()
+    public void An_epic_release_missing_from_the_roadmap_is_a_warning()
     {
-        WriteIndex(Good.Replace("release: V1", "release: V9"));
-        Directory.CreateDirectory(Path.Combine(Skills, "board"));
+        var report = CheckYaml("""
+            project: Acme App
+            roadmap: [1.0.0]
+            epics:
+            - number: 1
+              release: 9.9.9
+              title: Core Application
+              stories: []
+            """);
 
-        var report = BacklogValidation.Check(Backlog, Skills);
-
+        var issue = Assert.Single(report.Issues, i => i.Message.Contains("9.9.9", StringComparison.Ordinal));
+        Assert.Equal("warning", issue.Severity);
         Assert.True(report.Ok);
-        Assert.Contains(report.Issues, i => i.Severity == "warning" && i.Message.Contains("V9"));
+    }
+
+    [Fact]
+    public void An_epic_with_no_release_is_not_an_issue()
+    {
+        var report = CheckYaml("""
+            project: Acme App
+            roadmap: [1.0.0]
+            epics:
+            - number: 1
+              title: Core Application
+              stories: []
+            """);
+
+        Assert.DoesNotContain(report.Issues, i => i.Message.Contains("release", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Two_epics_sharing_an_unlisted_release_each_point_at_their_own_line()
+    {
+        var report = CheckYaml("""
+            project: Acme App
+            roadmap: [1.0.0]
+            epics:
+            - number: 1
+              release: 9.9.9
+              title: First
+              stories: []
+            - number: 2
+              release: 9.9.9
+              title: Second
+              stories: []
+            """);
+
+        var warnings = report.Issues.Where(i => i.Message.Contains("9.9.9", StringComparison.Ordinal)).ToList();
+        Assert.Equal(2, warnings.Count);
+        Assert.NotEqual(warnings[0].Where, warnings[1].Where);
     }
 
     [Fact]
@@ -298,6 +347,67 @@ public class BacklogValidationTests : IDisposable
         var issue = report.Issues.First(i => i.Severity == "error");
         Assert.Contains("test-cases.yaml", issue.Where);
         Assert.DoesNotContain("tasks.yaml", issue.Where);
+    }
+
+    private const string CommentedOld = """
+        # Planning notes live in this file too.
+        project: Test
+        roadmap: [V1]
+        epics:
+          - number: 0
+            title: Tooling
+            stories:
+              - code: US-01
+                title: Board
+                status: Done
+                release: V1   # agreed in the kickoff
+                folder: board
+        """;
+
+    [Fact]
+    public void An_old_file_with_comments_warns_that_the_next_change_will_drop_them()
+    {
+        Directory.CreateDirectory(Path.Combine(Skills, "board"));
+
+        var report = CheckYaml(CommentedOld);
+
+        Assert.True(report.Ok);
+        var warning = Assert.Single(report.Issues, i => i.Message.Contains("comment", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("warning", warning.Severity);
+        Assert.Contains("BACKLOG.yaml", warning.Where);
+    }
+
+    [Fact]
+    public void A_commented_file_already_in_the_new_shape_has_nothing_to_warn_about()
+    {
+        Directory.CreateDirectory(Path.Combine(Skills, "board"));
+
+        var report = CheckYaml("""
+            # Planning notes live in this file too.
+            project: Test
+            roadmap: [V1]
+            epics:
+              - number: 0
+                release: V1   # agreed in the kickoff
+                title: Tooling
+                stories:
+                  - code: US-01
+                    title: Board
+                    status: Done
+                    folder: board
+            """);
+
+        Assert.DoesNotContain(report.Issues, i => i.Message.Contains("comment", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void A_hash_inside_a_quoted_value_is_not_a_comment()
+    {
+        Directory.CreateDirectory(Path.Combine(Skills, "board"));
+
+        var report = CheckYaml(Good.Replace("title: Board", "title: 'Board #1'"));
+
+        Assert.DoesNotContain(report.Issues, i => i.Message.Contains("comment", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

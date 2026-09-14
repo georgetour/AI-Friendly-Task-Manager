@@ -44,25 +44,33 @@ public class TemplateFileTests
         YamlIndex.Parse(File.ReadAllText(TemplateLocator.Find("BACKLOG.template.yaml")));
 
     [Fact]
-    public void Backlog_template_has_five_epics_with_expected_story_counts()
+    public void Backlog_template_has_eight_epics_with_expected_story_counts()
     {
+        // Epic 1 split along its release lines into epics 5-7 (Notifications, Reporting,
+        // Wishlist) once the release moved from the story to the epic — see YamlIndex.
         var byNum = Template().Epics.ToDictionary(e => e.Number, e => e.Stories.Count);
 
-        Assert.Equal(5, byNum.Count);
+        Assert.Equal(8, byNum.Count);
         Assert.Equal(2, byNum[0]);   // Developer Tooling
-        Assert.Equal(11, byNum[1]);  // Core Application
+        Assert.Equal(8, byNum[1]);   // Core Application
         Assert.Equal(4, byNum[2]);   // CI/CD and Deployment
         Assert.Equal(1, byNum[3]);   // Mobile Apps — the placeholder story
         Assert.Equal(6, byNum[4]);   // Scaling and Performance
+        Assert.Equal(1, byNum[5]);   // Notifications
+        Assert.Equal(1, byNum[6]);   // Reporting
+        Assert.Equal(1, byNum[7]);   // Wishlist
     }
 
     [Fact]
-    public void Backlog_template_has_24_sequentially_coded_stories()
+    public void Backlog_template_has_24_uniquely_coded_stories()
     {
+        // No longer in US-01..US-24 file order: US-11/12/13 now sit under the epics their own
+        // release lines moved them to, after every other epic. Uniqueness and completeness are
+        // what matters, not position.
         var codes = Template().Epics.SelectMany(e => e.Stories).Select(s => s.Code).ToList();
 
         Assert.Equal(24, codes.Count);
-        Assert.Equal(Enumerable.Range(1, 24).Select(i => $"US-{i:D2}"), codes);
+        Assert.Equal(Enumerable.Range(1, 24).Select(i => $"US-{i:D2}").OrderBy(c => c), codes.OrderBy(c => c));
     }
 
     [Fact]
@@ -157,13 +165,45 @@ public class TemplateFileTests
     }
 
     [Fact]
-    public void Every_release_used_by_a_story_is_declared_in_the_roadmap()
+    public void Every_release_used_by_an_epic_is_declared_in_the_roadmap()
     {
         var board = Template();
 
-        var used = board.Epics.SelectMany(e => e.Stories)
-            .Select(s => s.Release).Where(r => !string.IsNullOrWhiteSpace(r)).Distinct();
+        var used = board.Epics.Select(e => e.Release).Where(r => !string.IsNullOrWhiteSpace(r)).Distinct();
 
         Assert.All(used, r => Assert.Contains(r, board.Roadmap));
+    }
+
+    [Fact]
+    public void The_README_documents_BACKLOG_yaml_in_the_shape_the_app_writes()
+    {
+        // Coding agents edit the backlog straight from this example. An example in the old shape
+        // teaches them to write a file the app has to convert on its next read.
+        var readme = File.ReadAllText(Path.Combine(Path.GetDirectoryName(TemplatesDir())!, "README.md"))
+            .Replace("\r\n", "\n");
+        var example = System.Text.RegularExpressions.Regex.Match(readme,
+            @"\*\*`BACKLOG\.yaml`\*\*\s*```yaml\n(.*?)```", System.Text.RegularExpressions.RegexOptions.Singleline);
+        Assert.True(example.Success, "README.md has no BACKLOG.yaml example.");
+
+        var board = YamlIndex.Parse(example.Groups[1].Value);
+
+        Assert.False(board.Migrated);
+        var epic = Assert.Single(board.Epics);
+        Assert.Contains(epic.Release, board.Roadmap);
+        Assert.NotEmpty(epic.Stories);
+    }
+
+    [Fact]
+    public void The_template_is_already_in_the_new_shape_so_nothing_converts_it()
+    {
+        var text = File.ReadAllText(TemplateLocator.Find("BACKLOG.template.yaml"));
+
+        var board = YamlIndex.Parse(text);
+
+        Assert.False(board.Migrated);
+        Assert.Equal(text.Replace("\r\n", "\n"), YamlIndex.Write(board).Replace("\r\n", "\n"));
+        Assert.Equal(8, board.Epics.Count);
+        Assert.Equal(24, board.Epics.Sum(e => e.Stories.Count));
+        Assert.All(board.Epics, e => Assert.Contains(e.Release, board.Roadmap));
     }
 }

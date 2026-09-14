@@ -1,3 +1,5 @@
+using System.Net.Http;
+using AIFTM.Api.Backlog;
 using Microsoft.Playwright;
 
 namespace AIFTM.Tests;
@@ -23,6 +25,30 @@ public class UiTests(UiFixture fx)
         await Assertions.Expect(page.Locator(".story-row").First).ToBeVisibleAsync();
         Assert.Equal(2, await page.Locator(".story-row:visible").CountAsync());
         UiFixture.AssertNoConsoleErrors(errors);
+    }
+
+    [Fact]
+    public async Task The_board_json_carries_nothing_that_exists_only_for_the_server()
+    {
+        // Whether the file was converted, what conversion moved, and the keys the index does not
+        // model are the server's business. Sent here they would also be baked into demo-data.js.
+        using var http = new HttpClient();
+        var json = await http.GetStringAsync($"{fx.BaseUrl}/api/board");
+
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var names = Descendants(doc.RootElement).ToList();
+        Assert.Contains("epics", names);
+        Assert.DoesNotContain("migrated", names);
+        Assert.DoesNotContain("releaseMoves", names);
+        Assert.DoesNotContain("extras", names);
+
+        static IEnumerable<string> Descendants(System.Text.Json.JsonElement e) => e.ValueKind switch
+        {
+            System.Text.Json.JsonValueKind.Object => e.EnumerateObject()
+                .SelectMany(p => Descendants(p.Value).Prepend(p.Name)),
+            System.Text.Json.JsonValueKind.Array => e.EnumerateArray().SelectMany(Descendants),
+            _ => [],
+        };
     }
 
     [Fact]
@@ -98,18 +124,252 @@ public class UiTests(UiFixture fx)
     }
 
     [Fact]
-    public async Task Status_chips_and_release_tags_line_up_into_columns()
+    public async Task Epic_header_release_and_version_slots_line_up_into_columns()
     {
-        // One story has a release and one does not — the case that used to leave the slot collapsed
-        // and every chip after it at a different x.
+        // A release and a version are now shown on the epic header, not the story row — the sample
+        // backlog gives epic "Tooling" both, and leaves "Empty Epic" with neither, which is the case
+        // that used to leave a slot collapsed and every control after it at a different x. The
+        // two-column "cur-set" and "epic-count" widths themselves are not stable — curLabel text
+        // differs between the current epic and the others — so the invariant checked here is the gap
+        // between the epic-open button and cur-set: it is spanned entirely by the (possibly hidden)
+        // version and release vtags, and must be identical whether they hold text or not.
         var (page, _) = await fx.NewPageAsync(1280, 800);
         await page.GotoAsync(fx.BaseUrl);
 
-        var lefts = await page.Locator(".story-row:visible .chip.row-badge")
-                              .EvaluateAllAsync<double[]>("els => els.map(e => Math.round(e.getBoundingClientRect().left))");
+        // Proves the populated path actually rendered, not just that the layout has room for it —
+        // a field swapped for the wrong one (release text in the version slot, say) would still lay
+        // out identically but say the wrong thing.
+        var toolingHeader = page.Locator(".epic-head", new() { HasTextString = "Tooling" });
+        await Assertions.Expect(toolingHeader.Locator(".vtag").First).ToHaveTextAsync("0.1.0");
+        await Assertions.Expect(toolingHeader.Locator(".vtag").Last).ToHaveTextAsync("V1");
 
-        Assert.True(lefts.Length >= 2, "Expected at least two visible story rows.");
-        Assert.Single(lefts.Distinct());
+        // Paired with the title rather than measured alone: a bare list of numbers says nothing
+        // about which header disagreed with the others when this fails on a platform whose fonts
+        // or fallback stack render a label a few pixels wider or narrower than this machine's.
+        var rows = await page.Locator(".epic-head:visible").EvaluateAllAsync<string[][]>(
+            "els => els.map(e => [e.querySelector('.epic-name').textContent," +
+            " String(Math.round(e.querySelector('.cur-set').getBoundingClientRect().left" +
+            " - e.querySelector('.epic-open').getBoundingClientRect().right))])");
+        var headers = rows.Select(r => (Title: r[0],
+            Gap: double.Parse(r[1], System.Globalization.CultureInfo.InvariantCulture))).ToList();
+
+        Assert.True(headers.Count >= 2, "Expected at least two visible epic headers.");
+        var distinctGaps = headers.Select(h => h.Gap).Distinct().Count();
+        Assert.True(distinctGaps == 1,
+            "Epic headers should all reserve the same width for their version/release slots, so "
+          + "cur-set and epic-count line up at the same x regardless of what a header's badges say. "
+          + "Per-header gap (epic-open to cur-set):\n"
+          + string.Join("\n", headers.Select(h => $"  {h.Title}: {h.Gap}px")));
+    }
+
+    [Fact]
+    public async Task Epic_header_labels_stay_readable_when_truncated_and_untruncated_when_short()
+    {
+        // The vtag slot above is a fixed 60px so headers stay in column — a label that does not
+        // fit is ellipsized rather than pushing the layout. Truncation with no way to read the
+        // rest would just trade one bug for another, so every vtag carries its full value as a
+        // title. The other half of that trade only holds if the labels this app actually ships —
+        // a version or a roadmap release, both two to five characters in every template and test
+        // fixture — never need the title in the first place, on any screen down to 320px, where
+        // the mobile stylesheet raises .vtag's own font-size and so needs more room, not less.
+        const int number = 952;
+        using var http = new HttpClient();
+        var body = new StringContent(
+            System.Text.Json.JsonSerializer.Serialize(
+                new { number, title = "Long Label Epic", version = (string?)null, release = "Scaling-Phase-2" }),
+            System.Text.Encoding.UTF8, "application/json");
+        (await http.PostAsync($"{fx.BaseUrl}/api/epic", body)).EnsureSuccessStatusCode();
+
+        try
+        {
+            var (desktop, _) = await fx.NewPageAsync(1280, 800);
+            await desktop.GotoAsync(fx.BaseUrl);
+
+            // The long label actually truncates — otherwise this test would prove nothing — and
+            // the full value is still readable through the title the fix added.
+            var longTag = desktop.Locator(".epic-head", new() { HasTextString = "Long Label Epic" })
+                .Locator(".vtag").Last;
+            await Assertions.Expect(longTag).ToHaveAttributeAsync("title", "Scaling-Phase-2");
+            await AssertTruncated(longTag, "Scaling-Phase-2", expectTruncated: true);
+
+            // Ordinary labels never need it: same check, both slots, at desktop width —
+            var toolingDesktop = desktop.Locator(".epic-head", new() { HasTextString = "Tooling" });
+            await AssertTruncated(toolingDesktop.Locator(".vtag").First, "0.1.0", expectTruncated: false);
+            await AssertTruncated(toolingDesktop.Locator(".vtag").Last, "V1", expectTruncated: false);
+
+            // — and at the narrowest width this app is designed for, where the label is the same
+            // two-to-five characters but the font asked to draw it is larger.
+            var (phone, _) = await fx.NewPageAsync(320, 760);
+            await phone.GotoAsync(fx.BaseUrl);
+            var toolingPhone = phone.Locator(".epic-head", new() { HasTextString = "Tooling" });
+            await AssertTruncated(toolingPhone.Locator(".vtag").First, "0.1.0", expectTruncated: false);
+            await AssertTruncated(toolingPhone.Locator(".vtag").Last, "V1", expectTruncated: false);
+        }
+        finally
+        {
+            await http.DeleteAsync($"{fx.BaseUrl}/api/epic/{number}");
+        }
+    }
+
+    /// <summary>A vtag is truncated when its content overflows the fixed-width box it is clipped
+    /// to — scrollWidth (the content's own width) exceeds clientWidth (the box's). Checked instead
+    /// of trusting the box's pixel width against a hand-computed threshold, so this keeps meaning
+    /// the same thing if the slot's width or font-size ever changes again.</summary>
+    private static async Task AssertTruncated(ILocator tag, string label, bool expectTruncated)
+    {
+        var widths = await tag.EvaluateAsync<int[]>("e => [e.scrollWidth, e.clientWidth]");
+        var truncated = widths[0] > widths[1];
+        Assert.True(truncated == expectTruncated,
+            $"\"{label}\": expected truncated={expectTruncated} but scrollWidth={widths[0]}, "
+          + $"clientWidth={widths[1]}.");
+    }
+
+    [Fact]
+    public async Task The_add_and_edit_epic_forms_set_the_version_and_the_release()
+    {
+        // Without this, an epic that conversion filed under the wrong release could only be moved
+        // by hand-editing the file. The add form proves a release can be chosen at creation; the
+        // edit form proves a version can be added afterwards without losing the release already set.
+        var (page, errors) = await fx.NewPageAsync();
+        using var http = new HttpClient();
+        try
+        {
+            await page.GotoAsync($"{fx.BaseUrl}/add-epic");
+
+            await page.Locator("#epicTitle").FillAsync("Reporting");
+            await page.Locator("#epicRelease").SelectOptionAsync("V1");
+            await page.Locator("button:has-text('Add epic')").ClickAsync();
+
+            // Submitting opens the epic's own page — which shows no version or release, by design:
+            // an epic page lists its stories and nothing else. The badges are the Overview's.
+            await page.GotoAsync(fx.BaseUrl);
+            var header = page.Locator(".epic-head", new() { HasTextString = "Reporting" });
+            await Assertions.Expect(header.Locator(".vtag").Last).ToHaveTextAsync("V1");
+
+            await header.Locator(".epic-open").ClickAsync();
+            await page.Locator("button:has-text('Edit epic')").ClickAsync();
+            await Assertions.Expect(page).ToHaveURLAsync($"{fx.BaseUrl}/edit-epic");
+
+            // Prefilled from the epic being edited, the same way the title already was.
+            await Assertions.Expect(page.Locator("#editEpicRelease")).ToHaveValueAsync("V1");
+            await page.Locator("#editEpicVersion").FillAsync("1.2.0");
+            // Scoped to the form actually on screen: "Save changes" is also the edit-story submit
+            // label, and hidden pages stay in the DOM rather than being removed.
+            await page.Locator("form:has(#editEpicVersion) button:has-text('Save changes')").ClickAsync();
+
+            await page.GotoAsync(fx.BaseUrl);
+            var updated = page.Locator(".epic-head", new() { HasTextString = "Reporting" });
+            await Assertions.Expect(updated.Locator(".vtag").First).ToHaveTextAsync("1.2.0");
+            await Assertions.Expect(updated.Locator(".vtag").Last).ToHaveTextAsync("V1");
+
+            // Proves the write reached the file, not just the in-memory board the UI already trusted.
+            var epic = YamlIndex.Parse(File.ReadAllText(fx.PrimaryBacklogPath))
+                .Epics.Single(e => e.Title == "Reporting");
+            Assert.Equal("1.2.0", epic.Version);
+            Assert.Equal("V1", epic.Release);
+
+            UiFixture.AssertNoConsoleErrors(errors);
+        }
+        finally
+        {
+            // One app serves the whole "ui" collection, so an epic left behind here would change
+            // what every later test — including the alignment test above — counts and measures.
+            var left = YamlIndex.Parse(File.ReadAllText(fx.PrimaryBacklogPath))
+                .Epics.FirstOrDefault(e => e.Title == "Reporting");
+            if (left is not null) await http.DeleteAsync($"{fx.BaseUrl}/api/epic/{left.Number}");
+        }
+    }
+
+    [Fact]
+    public async Task An_unlisted_release_survives_an_edit_that_leaves_it_untouched()
+    {
+        // A release outside the roadmap is legal — Validate() only warns about it — so it can reach
+        // an epic through conversion or a hand-edit. The edit form used to offer only roadmap
+        // entries, so opening and saving it with nothing changed silently reset the release to
+        // Unscheduled because the dropdown had nowhere to put the value it started with.
+        const int number = 950;
+        using var http = new HttpClient();
+        var body = new StringContent(
+            System.Text.Json.JsonSerializer.Serialize(
+                new { number, title = "Legacy Work", version = (string?)null, release = "Legacy" }),
+            System.Text.Encoding.UTF8, "application/json");
+        (await http.PostAsync($"{fx.BaseUrl}/api/epic", body)).EnsureSuccessStatusCode();
+
+        try
+        {
+            var (page, errors) = await fx.NewPageAsync();
+            await page.GotoAsync(fx.BaseUrl);
+
+            await page.Locator(".epic-head", new() { HasTextString = "Legacy Work" }).Locator(".epic-open").ClickAsync();
+            await page.Locator("button:has-text('Edit epic')").ClickAsync();
+
+            // The unlisted value is offered back rather than silently dropped from the picker.
+            await Assertions.Expect(page.Locator("#editEpicRelease")).ToHaveValueAsync("Legacy");
+
+            await page.Locator("form:has(#editEpicVersion) button:has-text('Save changes')").ClickAsync();
+
+            await page.GotoAsync(fx.BaseUrl);
+            var header = page.Locator(".epic-head", new() { HasTextString = "Legacy Work" });
+            await Assertions.Expect(header.Locator(".vtag").Last).ToHaveTextAsync("Legacy");
+
+            var epic = YamlIndex.Parse(File.ReadAllText(fx.PrimaryBacklogPath))
+                .Epics.Single(e => e.Title == "Legacy Work");
+            Assert.Equal("Legacy", epic.Release);
+
+            UiFixture.AssertNoConsoleErrors(errors);
+        }
+        finally
+        {
+            // Same reason as above: this epic's unusually wide release tag ("Legacy" versus "V1")
+            // is exactly the kind of leftover state the alignment test would otherwise trip over.
+            await http.DeleteAsync($"{fx.BaseUrl}/api/epic/{number}");
+        }
+    }
+
+    [Fact]
+    public async Task An_epic_can_move_from_one_release_to_a_different_one()
+    {
+        // An epic already on a release — here, one outside the roadmap entirely, the harder of the two
+        // cases — corrected through the form to a different, roadmap-listed release, rather than by
+        // hand-editing the file.
+        const int number = 951;
+        using var http = new HttpClient();
+        var body = new StringContent(
+            System.Text.Json.JsonSerializer.Serialize(
+                new { number, title = "Relocated Work", version = (string?)null, release = "Legacy" }),
+            System.Text.Encoding.UTF8, "application/json");
+        (await http.PostAsync($"{fx.BaseUrl}/api/epic", body)).EnsureSuccessStatusCode();
+
+        try
+        {
+            var (page, errors) = await fx.NewPageAsync();
+            await page.GotoAsync(fx.BaseUrl);
+
+            await page.Locator(".epic-head", new() { HasTextString = "Relocated Work" }).Locator(".epic-open").ClickAsync();
+            await page.Locator("button:has-text('Edit epic')").ClickAsync();
+
+            // Starts on the unlisted release, offered back the same way the test above proves.
+            await Assertions.Expect(page.Locator("#editEpicRelease")).ToHaveValueAsync("Legacy");
+            await page.Locator("#editEpicRelease").SelectOptionAsync("V1");
+            await page.Locator("form:has(#editEpicVersion) button:has-text('Save changes')").ClickAsync();
+
+            await page.GotoAsync(fx.BaseUrl);
+            var header = page.Locator(".epic-head", new() { HasTextString = "Relocated Work" });
+            await Assertions.Expect(header.Locator(".vtag").Last).ToHaveTextAsync("V1");
+
+            // Proves the write reached the file, not just the in-memory board the UI already trusted.
+            var epic = YamlIndex.Parse(File.ReadAllText(fx.PrimaryBacklogPath))
+                .Epics.Single(e => e.Title == "Relocated Work");
+            Assert.Equal("V1", epic.Release);
+
+            UiFixture.AssertNoConsoleErrors(errors);
+        }
+        finally
+        {
+            // An epic left behind here would skew the epic-header gap measurement for every test that
+            // runs after it.
+            await http.DeleteAsync($"{fx.BaseUrl}/api/epic/{number}");
+        }
     }
 
     [Fact]

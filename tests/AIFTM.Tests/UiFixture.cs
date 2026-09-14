@@ -103,7 +103,7 @@ public sealed class UiFixture : IAsyncLifetime
     /// <summary>The project every other test expects to be open.</summary>
     public string PrimaryBacklogPath => Path.Combine(_root, "BACKLOG.yaml");
 
-    /// <summary>A writable copy of the shipped demo — 5 epics, 24 stories, real tasks and test
+    /// <summary>A writable copy of the shipped demo — 8 epics, 24 stories, real tasks and test
     /// cases. Copied rather than pointed at, because searching it is a read but selecting a project
     /// is a write, and `templates/` is part of the repo.</summary>
     public string DemoBacklogPath
@@ -272,11 +272,12 @@ public sealed class UiFixture : IAsyncLifetime
             epics:
               - number: 0
                 title: Tooling
+                release: V1
+                version: "0.1.0"
                 stories:
                   - code: US-01
                     title: Backlog Board
                     status: Done
-                    release: V1
                     folder: board
                   - code: US-02
                     title: Status Write Back
@@ -286,8 +287,9 @@ public sealed class UiFixture : IAsyncLifetime
                 title: Empty Epic
             """);
 
-        // One story with a release and one without: that difference is what used to knock the
-        // status column out of line.
+        // One epic has a release and a version, the other has neither: that difference is what used
+        // to knock the epic header's own columns out of line, now that the release moved from the
+        // story to the epic.
         File.WriteAllText(Path.Combine(_root, "skills", "board", "SKILL.md"),
             "---\nname: board\n---\n\n# Backlog Board\n\n## Description\n\nThe board.\n");
         File.WriteAllText(Path.Combine(_root, "skills", "write-back", "SKILL.md"),

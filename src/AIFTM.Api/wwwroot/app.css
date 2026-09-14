@@ -396,11 +396,20 @@ button.rel-head{border-top:none;border-right:none;cursor:pointer}
 .chip.st-test,.chip.st-done,.chip.st-hold,.chip.st-fail{border-color:transparent}
 
 /* Release tag on a card. */
-/* min-width matches .chip.sm's reservation: a release is optional and varies in width (V1, V0.1,
-   V1.10), and without a fixed slot every status chip after it sat at a different x down the page. */
+/* A release or version is optional and varies in width (V1, V0.1, V1.10, a hand-typed "Legacy"),
+   and without a fixed slot every control after it — cur-set, epic-count — sat at a different x down
+   the page. `min-width` alone does not do that: it only sets a floor, so a label wider than it still
+   grows the box and shifts everything after it, on every platform, the moment the text is wide
+   enough — which is exactly what "0.1.0" did under Linux's font metrics in CI while fitting under
+   Windows'. `width` is a true ceiling as well as a floor, so the slot cannot grow; `overflow:hidden`
+   makes flexbox honour that width instead of expanding to the text's min-content size, and
+   text-overflow gives a long label a visible "…" rather than mid-character clipping. A label this
+   long is rare — most are two to five characters — so trading it for guaranteed alignment is a
+   fair trade even though it is the whole label that matters for a version/release name. */
 .vtag{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;color:var(--muted);
-  border:1px solid var(--border);border-radius:5px;padding:1px 6px;background:var(--surface2);white-space:nowrap;
-  display:inline-flex;align-items:center;justify-content:center;min-width:46px;flex:none}
+  border:1px solid var(--border);border-radius:5px;padding:1px 6px;background:var(--surface2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;
+  display:inline-block;width:60px;flex:none}
 /* Hidden, not removed — it still has to hold the column open. */
 .vtag.empty{visibility:hidden}
 .vtag.lg{font-size:11px;padding:1px 7px}

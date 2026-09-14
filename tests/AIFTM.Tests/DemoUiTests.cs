@@ -38,7 +38,7 @@ public class DemoUiTests(UiFixture fx) : IDisposable
         // The board drew, which means Alpine started, the assets resolved from a folder, and
         // demo-api.js answered the board request.
         await Assertions.Expect(page.Locator(".story-row").First).ToBeVisibleAsync();
-        await Assertions.Expect(page.Locator(".summary-total")).ToContainTextAsync("24 stories in 5 epics");
+        await Assertions.Expect(page.Locator(".summary-total")).ToContainTextAsync("24 stories in 8 epics");
         await Assertions.Expect(page.Locator(".demo-chip")).ToBeVisibleAsync();
 
         // Navigation is real URLs, under the folder.

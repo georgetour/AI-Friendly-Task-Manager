@@ -165,21 +165,43 @@ public class EndpointContractTests : IDisposable
     [Fact]
     public void An_unknown_epic_is_rejected_everywhere_it_can_be_named()
     {
-        Assert.Throws<BacklogValidationException>(() => _svc.RenameEpic(99, "Nope"));
+        Assert.Throws<BacklogValidationException>(() => _svc.EditEpic(99, "Nope", null, null));
         Assert.Throws<BacklogValidationException>(() => _svc.DeleteEpic(99));
-        Assert.Throws<BacklogValidationException>(() => _svc.AddStory(99, "US-02", "Nope", "V1"));
+        Assert.Throws<BacklogValidationException>(() => _svc.AddStory(99, "US-02", "Nope"));
+    }
+
+    // ---------- an epic's version and release ----------
+
+    [Fact]
+    public void An_over_long_epic_version_or_release_is_rejected_on_add_and_on_edit()
+    {
+        // Reachable with curl regardless of the <select>/<input> the form offers, so the cap is
+        // enforced here rather than trusted from the browser.
+        Assert.Throws<BacklogValidationException>(() => _svc.AddEpic(1, "Core", new string('x', 21), null));
+        Assert.Throws<BacklogValidationException>(() => _svc.AddEpic(1, "Core", null, new string('x', 21)));
+        Assert.Throws<BacklogValidationException>(() => _svc.EditEpic(0, "Tooling", new string('x', 21), null));
+        Assert.Throws<BacklogValidationException>(() => _svc.EditEpic(0, "Tooling", null, new string('x', 21)));
+    }
+
+    [Fact]
+    public void A_release_outside_the_roadmap_is_accepted_because_validation_only_warns_about_it()
+    {
+        // Rejecting here would make a hand-edited or converted release impossible to keep through
+        // an edit — Validate() already reports it as a warning, not an error.
+        var board = _svc.EditEpic(0, "Tooling", null, "Not-On-Roadmap");
+
+        Assert.Equal("Not-On-Roadmap", board.Epics.Single().Release);
     }
 
     // ---------- editing a story ----------
 
     [Fact]
-    public void EditStory_changes_the_title_and_release()
+    public void EditStory_changes_the_title()
     {
-        _svc.EditStory("US-01", "Renamed Board", "V2");
+        _svc.EditStory("US-01", "Renamed Board");
 
         var story = _svc.GetBoard().Epics[0].Stories.Single();
         Assert.Equal("Renamed Board", story.Title);
-        Assert.Equal("V2", story.Release);
     }
 
     [Fact]
@@ -189,7 +211,7 @@ public class EndpointContractTests : IDisposable
         // directory someone may have open is a worse failure than a name that has drifted.
         _svc.SetTasks("US-01", new[] { new TaskItem("Keep me", true) });
 
-        _svc.EditStory("US-01", "A Completely Different Title", "V1");
+        _svc.EditStory("US-01", "A Completely Different Title");
 
         var story = _svc.GetBoard().Epics[0].Stories.Single();
         Assert.Equal("board", story.Folder);
@@ -200,7 +222,7 @@ public class EndpointContractTests : IDisposable
     [Fact]
     public void EditStory_changes_the_url_because_the_slug_follows_the_title()
     {
-        _svc.EditStory("US-01", "Checkout and Payment", "V1");
+        _svc.EditStory("US-01", "Checkout and Payment");
 
         Assert.Equal("checkout-and-payment", _svc.GetBoard().Epics[0].Stories.Single().Slug);
     }
@@ -210,20 +232,20 @@ public class EndpointContractTests : IDisposable
     [InlineData("   ")]
     public void EditStory_rejects_an_empty_title(string title)
     {
-        Assert.Throws<BacklogValidationException>(() => _svc.EditStory("US-01", title, "V1"));
+        Assert.Throws<BacklogValidationException>(() => _svc.EditStory("US-01", title));
     }
 
     [Fact]
     public void EditStory_rejects_an_over_long_title()
     {
         Assert.Throws<BacklogValidationException>(
-            () => _svc.EditStory("US-01", new string('x', 121), "V1"));
+            () => _svc.EditStory("US-01", new string('x', 121)));
     }
 
     [Fact]
     public void EditStory_rejects_an_unknown_story()
     {
-        Assert.Throws<BacklogValidationException>(() => _svc.EditStory("US-99", "Nope", "V1"));
+        Assert.Throws<BacklogValidationException>(() => _svc.EditStory("US-99", "Nope"));
     }
 
     // ---------- description written at creation ----------
@@ -231,7 +253,7 @@ public class EndpointContractTests : IDisposable
     [Fact]
     public void AddStory_writes_the_description_into_the_new_SKILL_md()
     {
-        _svc.AddStory(0, "US-02", "Export to CSV", "V1",
+        _svc.AddStory(0, "US-02", "Export to CSV",
             "As an analyst, I want to export the report, so that I can work on it offline.");
 
         var skill = File.ReadAllText(Path.Combine(Skills, "export-to-csv", "SKILL.md"));
@@ -242,7 +264,7 @@ public class EndpointContractTests : IDisposable
     [Fact]
     public void AddStory_keeps_the_rest_of_the_scaffold_around_the_description()
     {
-        _svc.AddStory(0, "US-02", "Export to CSV", "V1", "Some prose.");
+        _svc.AddStory(0, "US-02", "Export to CSV", "Some prose.");
 
         var skill = File.ReadAllText(Path.Combine(Skills, "export-to-csv", "SKILL.md"));
         Assert.Contains("## Description", skill);
@@ -255,7 +277,7 @@ public class EndpointContractTests : IDisposable
     [Fact]
     public void AddStory_without_a_description_still_gets_the_template()
     {
-        _svc.AddStory(0, "US-02", "Export to CSV", "V1", null);
+        _svc.AddStory(0, "US-02", "Export to CSV", null);
 
         var skill = File.ReadAllText(Path.Combine(Skills, "export-to-csv", "SKILL.md"));
         Assert.Contains("## Description", skill);
@@ -265,7 +287,7 @@ public class EndpointContractTests : IDisposable
     [Fact]
     public void A_description_containing_markup_is_stored_as_written()
     {
-        _svc.AddStory(0, "US-02", "Export to CSV", "V1", "<script>alert(1)</script> and **bold**");
+        _svc.AddStory(0, "US-02", "Export to CSV", "<script>alert(1)</script> and **bold**");
 
         var skill = File.ReadAllText(Path.Combine(Skills, "export-to-csv", "SKILL.md"));
         Assert.Contains("<script>alert(1)</script>", skill);   // it is a text file; escaping happens on render

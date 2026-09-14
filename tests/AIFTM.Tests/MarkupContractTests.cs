@@ -67,12 +67,50 @@ public class MarkupContractTests
     [Fact]
     public void The_release_slot_is_hidden_rather_than_removed()
     {
-        // Whether the columns actually line up is asserted in a browser, in UiTests — measuring
-        // rendered positions rather than matching stylesheet text. This only pins the markup
-        // decision behind it: hidden when empty, never removed.
+        // A story no longer carries a release — the epic does — so the slot that used to hide
+        // rather than collapse moved to the epic header. Whether the columns actually line up is
+        // asserted in a browser, in UiTests — measuring rendered positions rather than matching
+        // stylesheet text. This only pins the markup decision behind it: hidden when empty, never
+        // removed.
         var html = Read("index.html");
 
-        Assert.Contains(@"x-bind:class=""story.releaseSlotClass""", html);
-        Assert.DoesNotContain(@"<span class=""vtag"" x-show=""story.release""", html);
+        Assert.Contains(@"x-bind:class=""section.releaseSlotClass""", html);
+        Assert.Contains(@"x-bind:class=""section.versionSlotClass""", html);
+        Assert.DoesNotContain(@"<span class=""vtag"" x-show=""section.release""", html);
+    }
+
+    [Fact]
+    public void The_story_row_no_longer_binds_a_release()
+    {
+        var html = Read("index.html");
+
+        Assert.DoesNotContain("story.release", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("story.releaseSlotClass", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_epic_header_shows_the_release()
+    {
+        var html = Read("index.html");
+
+        Assert.Contains("section.releaseLabel", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Both_epic_forms_offer_a_version_field_and_a_release_picker()
+    {
+        // Without this, an epic filed under the wrong release by conversion could only be moved by
+        // hand-editing the file.
+        var html = Read("index.html");
+
+        var addForm = Regex.Match(html, @"page === 'add-epic'.*?</form>", RegexOptions.Singleline).Value;
+        var editForm = Regex.Match(html, @"page === 'edit-epic'.*?</form>", RegexOptions.Singleline).Value;
+
+        foreach (var form in new[] { addForm, editForm })
+        {
+            Assert.Contains(@"name=""version""", form, StringComparison.Ordinal);
+            Assert.Contains(@"<select", form, StringComparison.Ordinal);
+            Assert.Contains(@"name=""release""", form, StringComparison.Ordinal);
+        }
     }
 }

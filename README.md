@@ -8,7 +8,7 @@ away — no save button, no database, no account.
 ## Try it right now
 
 **[georgetour.github.io/AI-Friendly-Task-Manager](https://georgetour.github.io/AI-Friendly-Task-Manager/)** — the whole
-board, on a demo backlog of 5 epics and 24 stories. No sign-in, no install, nothing to accept.
+board, on a demo backlog of 8 epics and 24 stories. No sign-in, no install, nothing to accept.
 
 Click statuses, tick tasks, search, edit a description. It is the real application, not a video or a
 mock-up: the same HTML, CSS and JavaScript this repo serves, with every answer the API would give
@@ -73,7 +73,7 @@ Open **http://localhost:5249**. It's the same address every time. `Ctrl+C` stops
 > ```
 
 That's the whole setup. Nothing to install, configure or sign up for — the first run shows a demo
-project with 5 epics and 24 stories so you can click around before pointing it at anything of yours.
+project with 8 epics and 24 stories so you can click around before pointing it at anything of yours.
 The demo is a real, editable copy, and it's gitignored, so nothing you do to it is at stake.
 
 ## Where everything is stored
@@ -110,7 +110,7 @@ Every button maps to exactly one file. Nothing writes to two places at once.
 |---|---|
 | Add an epic | `BACKLOG.yaml` — a new epic, numbered for you |
 | Add a story | `BACKLOG.yaml` — a new story, plus a new `skills/<story>/` folder with a starter `SKILL.md` |
-| Rename an epic | `BACKLOG.yaml` — the title only; its stories are untouched |
+| Edit an epic | `BACKLOG.yaml` — the title, version and release; its stories are untouched |
 | Set the current epic | `BACKLOG.yaml` — one line, `currentEpic:` |
 | Change a story's status | `BACKLOG.yaml` — one line. Marking it **Done** with tasks unticked or test cases unpassed asks first |
 | Add / edit / delete / tick / reorder a task | `skills/<story>/tasks.yaml` |
@@ -163,12 +163,13 @@ currentEpic: 0          # optional — the epic you're working in, by number
 
 epics:
   - number: 0
+    version: 0.1.0      # optional — the epic's own version
+    release: V1         # optional — which roadmap release the epic belongs to
     title: Your Epic Title
     stories:
       - code: US-01
         title: Your Story Title
         status: In Progress
-        release: V1
         folder: your-story-title
 ```
 
